@@ -7,13 +7,33 @@ This document describes the repeatable build and installation loop for this fork
 Install the following on the computer used for development:
 
 - Git;
-- Node.js. The repository pins the Node.js line in `.nvmrc` (`lts/fermium`, Node.js 14). With `nvm`, run:
+- Node.js 14 (required). The repository pins the Node.js line in `.nvmrc` (`lts/fermium`). The build uses `react-scripts` 4 and webpack 4, which are not compatible with Node.js 17 and newer: those versions use OpenSSL 3 and can fail with `ERR_OSSL_EVP_UNSUPPORTED`. If `nvm` is not installed on macOS with zsh, install the pinned, signed [`v0.40.6` release](https://github.com/nvm-sh/nvm/releases/tag/v0.40.6) using Git. The commit check prevents a moved tag from being accepted:
+
+  ```sh
+  NVM_VERSION=v0.40.6
+  NVM_COMMIT=b6cf55f6adf3b953d0e5e00a4049444e300e3af8
+  git clone --depth 1 --branch "$NVM_VERSION" https://github.com/nvm-sh/nvm.git "$HOME/.nvm"
+  test "$(git -C "$HOME/.nvm" rev-parse HEAD)" = "$NVM_COMMIT" || {
+    echo "Unexpected nvm commit; remove $HOME/.nvm and stop"
+    exit 1
+  }
+  touch "$HOME/.zshrc"
+  printf '%s\n' \
+    'export NVM_DIR="$HOME/.nvm"' \
+    '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> "$HOME/.zshrc"
+  source ~/.zshrc
+  command -v nvm
+  ```
+
+  Then use the repository's Node.js version:
 
   ```sh
   nvm install "$(cat .nvmrc)"
   nvm use "$(cat .nvmrc)"
   node --version
   ```
+
+  Confirm that the output starts with `v14.` before installing dependencies or running the build. A newer Node.js version may be installed on the computer, but it must not be used for this repository's build and packaging loop.
 
 - Yarn Classic 1.x. The lockfile is Yarn v1; use a fixed Yarn version for a reproducible dependency install:
 
@@ -52,6 +72,17 @@ out/kinopub.webos_v<version>.ipk
 For the current `package.json`, for example, the file is `out/kinopub.webos_v1.3.0.ipk`. `yarn package` also creates packages with the test IDs used by the existing project tooling; install the package whose name starts with `kinopub.webos_v` and has no additional suffix.
 
 The same build and package commands are used by the repository's GitHub Actions workflows. For code changes, `yarn lint` is a useful local check before building; the build and package steps are the checks that produce the TV artifact.
+
+### Troubleshoot a failed build on a newer Node.js version
+
+If `yarn build` fails with `error:0308010C:digital envelope routines::unsupported` or `ERR_OSSL_EVP_UNSUPPORTED`, check the active runtime:
+
+```sh
+node --version
+nvm use "$(cat .nvmrc)"
+node --version
+yarn build
+```
 
 ## Prepare the LG TV and Developer Mode session
 
