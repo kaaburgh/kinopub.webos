@@ -22,6 +22,7 @@
     "format": "yarn run prettier --write",
     "format:check": "yarn run prettier --check",
     "check:docs": "node ./scripts/check-docs-links.js",
+    "check:es5": "node ./scripts/check-es5.js",
     "prepare": "husky install"
   },
   "dependencies": {
@@ -75,6 +76,7 @@
     "@typescript-eslint/eslint-plugin": "4.30.0",
     "@typescript-eslint/parser": "4.30.0",
     "@webosose/ares-cli": "2.2.0",
+    "acorn": "7.4.1",
     "babel-eslint": "10.1.0",
     "concurrently": "6.2.1",
     "dotenv-load": "2.0.0",
