@@ -88,10 +88,40 @@ Two assertions are written specifically as upgrade tripwires:
 - _"is retried by hls.js several times before it becomes fatal"_ asserts that at least five non-fatal
   `fragLoadError`s precede the first fatal one. If a new version escalates immediately, the player's
   policy of ignoring non-fatal errors becomes wrong.
-- _"escalates a hanging edge itself rather than waiting for hls.js to call it fatal"_ asserts that
-  hls.js has **not** produced a fatal error inside a window in which the stall watchdog has already
-  refetched the playlist twice. If a new version escalates inside that window, the watchdog may no
-  longer be needed.
+- _"reacts to a hanging edge just ahead of hls.js"_ asserts that the watchdog's first action still
+  precedes hls.js's first fatal error. That margin was over three minutes on 1.0.10 and is about ten
+  seconds on 1.7. If a future version escalates first, the watchdog has stopped earning its place.
+
+This second one has already fired once, and what it produced is the model for reading the others.
+Upgrading to 1.7 turned the scenario from _"hls.js will not call this broken, so we must"_ into
+_"both of us call it broken, we are barely first"_ — so the assertion was rewritten to state the new
+behaviour rather than relaxed to accommodate it, and the consequence for the watchdog was recorded
+against **A6** in the roadmap. A tripwire that fires is doing its job; the work is deciding what the
+new behaviour means, not making the test green again.
+
+## Keeping the mock loader honest across versions
+
+The loader contract is stable in shape, but not in detail, and a stale detail fails quietly rather
+than loudly. hls.js 1.6 replaced the single `timeout` with a pair of deadlines and still passes the
+old field beside them:
+
+```
+{ timeout: 120000, loadPolicy: { maxTimeToFirstByteMs: 10000, maxLoadTimeMs: 120000 }, ... }
+```
+
+They are not interchangeable. A request that is accepted and then answered with silence is abandoned
+after the **first-byte** deadline, ten seconds — not after the two-minute whole-response one. A mock
+honouring `timeout` alone looked six times more patient than a browser, which suppressed every
+`fragLoadTimeOut` in the hanging-edge scenario and made it look as though 1.7 had stopped reporting
+timeouts at all. `firstByteDeadline` in `hlsCdn.ts` reads the policy when it is present and falls
+back to `timeout` when it is not, so the same mock is faithful to both versions.
+
+The same applies to retries: 1.0.10 expected the loader to retry playlist requests itself
+(`maxRetry` non-zero), while 1.6+ passes `maxRetry: 0` everywhere and retries above the loader. The
+mock still mirrors the old behaviour, which is inert on newer versions and correct on older ones.
+
+**When a scenario behaves oddly after an upgrade, log the `config` the loader receives before
+anything else.** It is the cheapest way to find a field that has moved.
 
 ## Scenarios with more than one level
 

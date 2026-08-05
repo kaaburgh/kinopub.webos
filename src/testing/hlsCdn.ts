@@ -188,7 +188,28 @@ type LoaderConfiguration = {
   timeout: number;
   retryDelay: number;
   maxRetryDelay: number;
+  /**
+   * hls.js 1.6 replaced the single `timeout` with a pair of deadlines, and still passes the old
+   * field alongside them. They are not interchangeable: a fragment gets `maxLoadTimeMs: 120000` but
+   * only `maxTimeToFirstByteMs: 10000`, so an edge that accepts a connection and then says nothing
+   * is abandoned after ten seconds rather than two minutes. A loader that honours `timeout` alone
+   * looks six times more patient than the real one.
+   */
+  loadPolicy?: {
+    maxTimeToFirstByteMs?: number;
+    maxLoadTimeMs?: number;
+  };
 };
+
+/** When a response that has produced no bytes yet is given up on. */
+function firstByteDeadline(config: LoaderConfiguration) {
+  return Math.min(config.loadPolicy?.maxTimeToFirstByteMs ?? Infinity, wholeResponseDeadline(config));
+}
+
+/** When a response that is still arriving is given up on. */
+function wholeResponseDeadline(config: LoaderConfiguration) {
+  return config.loadPolicy?.maxLoadTimeMs ?? config.timeout ?? Infinity;
+}
 
 function newStats() {
   return {
@@ -367,7 +388,7 @@ export function createMockCdn(options: MockCdnOptions = {}) {
               observers.forEach((observer) => observer(request, reply));
               callbacks.onTimeout(this.stats, context, null);
             }
-          }, config.timeout),
+          }, firstByteDeadline(config)),
         );
 
         return;
@@ -379,6 +400,23 @@ export function createMockCdn(options: MockCdnOptions = {}) {
         reply.status >= 200 && reply.status < 300 && reply.body !== undefined && request.kind === 'fragment'
           ? segmentBytesForLevel(levelOfPath ? Number(levelOfPath[1]) : 0)
           : 0;
+
+      const arrivesIn = transferMs(wireBytes);
+
+      // A transfer the link cannot finish inside the deadline is abandoned, not delivered late.
+      if (arrivesIn > wholeResponseDeadline(config)) {
+        this.timers.push(
+          setTimeout(() => {
+            if (!this.destroyed) {
+              this.stats.aborted = true;
+              observers.forEach((observer) => observer(request, { hang: true }));
+              callbacks.onTimeout(this.stats, context, null);
+            }
+          }, wholeResponseDeadline(config)),
+        );
+
+        return;
+      }
 
       this.timers.push(
         setTimeout(() => {
@@ -425,7 +463,7 @@ export function createMockCdn(options: MockCdnOptions = {}) {
           this.retryDelay = Math.min(2 * this.retryDelay, config.maxRetryDelay);
           this.stats.retry += 1;
           this.timers.push(setTimeout(() => !this.destroyed && this.attempt(context, config, callbacks), delay));
-        }, transferMs(wireBytes)),
+        }, arrivesIn),
       );
     }
 

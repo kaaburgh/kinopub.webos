@@ -351,11 +351,15 @@ describe('playback scenarios', () => {
     harness.destroy();
   });
 
-  it('escalates a hanging edge itself rather than waiting for hls.js to call it fatal', async () => {
-    // The worst version of the failure: the connection is accepted and then abandoned. hls.js does
-    // notice -- each request eventually times out -- but a timeout is non-fatal, so it simply
-    // requests the same unanswerable URL again. Nothing escalates on its own for minutes, while the
-    // viewer has been looking at a frozen picture the whole time.
+  it('reacts to a hanging edge just ahead of hls.js, which now escalates one too', async () => {
+    // The worst version of the failure: the connection is accepted and then abandoned.
+    //
+    // This scenario is where the upgrade to 1.7 showed most. On 1.0.10 hls.js produced non-fatal
+    // timeouts every twenty seconds and did not call the stream broken for four and a half minutes,
+    // which was the whole case for the stall watchdog. 1.7 abandons a silent request after
+    // `maxTimeToFirstByteMs` -- ten seconds, not the two-minute whole-response deadline -- reports
+    // the stall itself through its gap controller, and reaches a fatal error inside ninety seconds.
+    // The watchdog still moves first, but by seconds rather than minutes.
     const harness = createPlaybackHarness({ cdn: STREAM, autoPlay: true });
     harness.cdn.intercept((request) =>
       request.kind === 'fragment' && harness.cdn.segmentIndexOf(request.path) >= 12 ? { hang: true } : undefined,
@@ -363,16 +367,23 @@ describe('playback scenarios', () => {
 
     await harness.advance(200000, 200);
 
-    // hls.js's own behaviour: timeouts, and only timeouts, for a long time.
-    expect(harness.hlsErrors.length).toBeGreaterThan(0);
-    expect(harness.hlsErrors.every((error) => error.reason === 'networkError / fragLoadTimeOut')).toBe(true);
+    // hls.js's own behaviour.
+    const reasons = harness.hlsErrors.map((error) => error.reason);
+    expect(reasons).toContain('networkError / fragLoadTimeOut');
+    // New in 1.6+: hls.js notices the frozen picture itself, though only to report it.
+    expect(reasons).toContain('mediaError / bufferStalledError');
 
-    expect(harness.hlsErrors.some((error) => error.fatal)).toBe(false);
+    const firstFatal = harness.hlsErrors.find((error) => error.fatal);
+    expect(firstFatal?.reason).toBe('networkError / fragLoadTimeOut');
 
-    // The player's: the watchdog has already refetched the playlist twice inside the window in
-    // which hls.js has not yet been willing to call the stream broken. Waiting for the fatal error
-    // instead is what left the picture frozen. If an upgrade makes hls.js escalate inside this
-    // window, this assertion fails -- which is the signal to reconsider the watchdog.
+    // The player's. The watchdog is still what refetches the playlist -- neither the timeouts nor
+    // `bufferStalledError` make hls.js ask for new segment URLs, and that is what actually moves a
+    // stream off a dead edge. But the margin is the thing to watch: if a future version escalates
+    // before the watchdog's first action, this fails, and the watchdog has stopped earning its
+    // place. It was over three minutes on 1.0.10.
+    const firstAction = harness.steps.find((step) => step.message.startsWith('watchdog-'));
+    expect(firstAction).toBeDefined();
+    expect(firstAction!.at).toBeLessThan(firstFatal!.at);
     expect(actions(harness)).toEqual(expect.arrayContaining(['watchdog-restart', 'watchdog-reload']));
 
     harness.destroy();
