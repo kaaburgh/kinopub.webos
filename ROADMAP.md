@@ -802,6 +802,20 @@ which now records it.
 > `STALL_MAX_RELOADS * 2`, but its escalation ends on a restart, so the overlay could render "7/6".
 > The cap now matches the escalation.
 >
+> **A gap the scenario harness exposed, and a decision to make.** Once the harness stopped starting
+> playback on its own — the element now stays paused until the player calls `play()` on `canplay`,
+> as it does on the television — a stream that fails from its very _first_ segment turns out to
+> reach no failure notice at all. The stall watchdog stands down while `video.paused` is true, and
+> nothing has buffered, so `canplay` never fires and `play()` is never called; the watchdog
+> therefore never engages, its budget is never spent, and `getFailure()` requires a spent stall
+> budget before it will report anything. hls.js still escalates and the fatal budget still runs out,
+> but the viewer is left on a black screen indefinitely rather than being told.
+>
+> The scenarios stage their outages after playback is under way, which is the reported case and the
+> only one they can currently speak to. Whether the terminal state should also be reachable from a
+> spent _fatal_ budget alone is a change to the rule in `getFailure()`, argued at length when it was
+> written, and is deliberately not being made as a side effect of test work.
+>
 > The general question — which recoveries suit which error details — still wants episode data across
 > more failures.
 

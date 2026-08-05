@@ -111,8 +111,14 @@ describe('playback scenarios', () => {
     });
 
     it('gives up and reports a terminal failure once every budget is spent', async () => {
+      // The outage starts after playback is under way, which is both the reported case and the only
+      // one the watchdog can see: it stands down while the element is paused, and the element stays
+      // paused until something has buffered. See the note in ROADMAP A20 on what that leaves open
+      // for a stream that fails from its very first segment.
       const harness = createPlaybackHarness({ cdn: STREAM, autoPlay: true });
-      harness.cdn.intercept((request) => (request.kind === 'fragment' ? { status: 502 } : undefined));
+      harness.cdn.intercept((request) =>
+        request.kind === 'fragment' && harness.cdn.segmentIndexOf(request.path) >= 4 ? { status: 502 } : undefined,
+      );
 
       await harness.advance(700000, 200);
 
@@ -248,6 +254,34 @@ describe('playback scenarios', () => {
     harness.destroy();
   });
 
+  it('does not credit the buffer with bytes the link has not delivered yet', async () => {
+    // A property of the harness rather than of the player, but the multi-level scenarios below are
+    // only meaningful if it holds: the buffer is modelled from what the CDN delivered, so crediting
+    // a fragment when it was *requested* would let a link too slow to keep up look healthy, and
+    // "no recovery engaged" would stop being evidence of anything.
+    const harness = createPlaybackHarness({
+      cdn: { ...ADAPTIVE, throughput: 9000000 },
+      sourceTracks: QUALITY_TRACKS,
+      autoPlay: true,
+    });
+
+    // Stop as soon as a fragment has been asked for. Even the smaller rendition is 3 MB, which
+    // takes over two seconds on this link, so nothing can have arrived yet.
+    while (harness.cdn.requestsOfKind('fragment').length === 0) {
+      // eslint-disable-next-line no-await-in-loop
+      await harness.advance(100);
+    }
+
+    expect(harness.playback.bufferedEnd).toBe(0);
+    await harness.advance(1000);
+    expect(harness.playback.bufferedEnd).toBe(0);
+
+    await harness.advance(15000);
+    expect(harness.playback.bufferedEnd).toBeGreaterThan(0);
+
+    harness.destroy();
+  });
+
   it("keeps the viewer's audio track across a quality switch that changes the audio group", async () => {
     // Switching quality moves to a level whose audio group lists the same languages in the opposite
     // order. hls.js has not forgotten the selection here -- it re-finds the track by name -- so the
@@ -281,7 +315,8 @@ describe('playback scenarios', () => {
     expect(harness.player.audioTrack).toBe('English');
     // A quality switch is not a failure; nothing should have recovered anything.
     expect(harness.hlsErrors).toEqual([]);
-    expect(harness.video.currentTime).toBeGreaterThan(60);
+    // Well past the switch, which happened at 34s.
+    expect(harness.video.currentTime).toBeGreaterThan(45);
 
     harness.destroy();
   });
@@ -345,7 +380,9 @@ describe('playback scenarios', () => {
 
   it('starts from a clean budget on a manual retry and resumes when the CDN recovers', async () => {
     const harness = createPlaybackHarness({ cdn: STREAM, autoPlay: true });
-    const stopFailing = harness.cdn.intercept((request) => (request.kind === 'fragment' ? { status: 502 } : undefined));
+    const stopFailing = harness.cdn.intercept((request) =>
+      request.kind === 'fragment' && harness.cdn.segmentIndexOf(request.path) >= 4 ? { status: 502 } : undefined,
+    );
 
     await harness.advance(700000, 200);
     expect(harness.player.failure).toBeDefined();

@@ -48,12 +48,13 @@ HLS_DEBUG=1 yarn test --watchAll=false --testPathPattern=media.scenarios
 | ------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------- |
 | Healthy stream                       | Everything served                                     | The baseline: no recovery should engage at all                            |
 | Refused segments, retried then fatal | Every segment 502                                     | hls.js's own retry ladder, recorded so a change shows up                  |
-| Refused segments, every budget spent | Every segment 502, indefinitely                       | The terminal state and the failure notice                                 |
+| Refused segments, every budget spent | Segments 502 from partway on, indefinitely            | The terminal state and the failure notice                                 |
 | Escape a bad edge                    | One edge 502s; a playlist refetch yields another edge | Sentry: every request to `…ams-static-01` failed while `…-03` served 200s |
 | Recover without restarting the film  | Same, with alternate audio renditions declared        | Issue #18: a fifty-minute film restarting from zero                       |
 | Keep the chosen audio track          | Same, after the viewer picks a non-default track      | Issue #18: playback resuming in the wrong language                        |
 | Hanging edge                         | Connection accepted, never answered                   | The frozen picture with no error to react to                              |
 | Manual retry                         | Dead CDN, then healed, then the viewer presses retry  | The retry button on the failure notice                                    |
+| Buffer credited on delivery          | A throttled link, checked before the first arrival    | A property the multi-level scenarios rest on                              |
 | Keep the audio track across a switch | Healthy; the viewer changes quality to another level  | Audio groups ordered differently per level                                |
 | Adapt to a link that cannot keep up  | Healthy, but the link carries only the lower level    | hls.js's own ABR, and the player staying out of its way                   |
 
@@ -131,7 +132,11 @@ the two tripwires above, where the number is the whole point and is documented a
   remux and buffering, but nothing here can detect a decoder problem — dropped frames, HDR
   behaviour, or the codec issues that only appear on the television's own hardware.
 - Playback progress is simulated from what the CDN delivered, so it is regular in a way real
-  playback is not.
+  playback is not. It also follows the player rather than running alongside it: the element stays
+  paused until the component calls `play()` on `canplay`, as it does on the television. A scenario
+  that breaks the CDN before anything has buffered therefore never starts playing at all, and the
+  stall watchdog — which stands down while paused — never engages. Stage outages after playback is
+  under way unless that is the thing being tested.
 - The scenarios cover network failures. Failures of the TV itself (memory pressure, the webOS media
   pipeline, remote-control focus) are out of reach and stay manual — see
   [Playback diagnostics manual test](./playback-diagnostics-manual-test.md).

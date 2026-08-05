@@ -123,11 +123,19 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
     sourceBuffers.forEach((sourceBuffer) => sourceBuffer.setBufferedRange(bufferStart, bufferEnd));
   }
 
-  // A new source buffer means hls.js reset the media source, so whatever was buffered is gone.
+  // A source buffer created to *replace* a removed one means hls.js reset the media source, so
+  // whatever was buffered is genuinely gone. The first one is not that: it is created once hls.js
+  // has codecs, which is after the first fragment has arrived and been credited -- clearing on
+  // every creation therefore threw away the fragment that caused it.
   const stopWatchingBuffers = onSourceBufferCreated((sourceBuffer) => {
-    sourceBuffers = [sourceBuffer];
-    bufferStart = 0;
-    bufferEnd = 0;
+    if (sourceBuffers.some((existing) => existing.removed)) {
+      sourceBuffers = [];
+      bufferStart = 0;
+      bufferEnd = 0;
+    }
+
+    sourceBuffers.push(sourceBuffer);
+    publishBuffer();
   });
 
   cdn.observe((request, reply) => {
@@ -154,7 +162,7 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
     publishBuffer();
   });
 
-  let playing = Boolean(options.autoPlay);
+  let playing = false;
   let position = 0;
 
   const container = document.createElement('div');
@@ -191,6 +199,18 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
     }),
   });
   Object.defineProperty(video, 'paused', { configurable: true, get: () => !playing });
+  // The simulation follows the player rather than running alongside it. Starting "playing" before
+  // the component has called `play()` would make the stall watchdog see a frozen picture during
+  // startup, when nothing has been buffered yet and nothing is wrong -- a stall the television
+  // never has, because there the element stays paused until `canplay`.
+  video.play = () => {
+    playing = true;
+
+    return Promise.resolve();
+  };
+  video.pause = () => {
+    playing = false;
+  };
   // Not cosmetic. hls.js skips its buffer bookkeeping entirely while `readyState` is 0, and jsdom
   // never leaves 0 -- which leaves `loadedmetadata` false, so hls.js measures its forward buffer
   // from the load position instead of the playback position, concludes it has buffered nothing and

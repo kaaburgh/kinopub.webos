@@ -355,7 +355,6 @@ export function createMockCdn(options: MockCdnOptions = {}) {
       requests.push(request);
 
       const reply = resolve(request);
-      observers.forEach((observer) => observer(request, reply));
       this.stats.loading.start = window.performance.now();
 
       if ('hang' in reply) {
@@ -365,6 +364,7 @@ export function createMockCdn(options: MockCdnOptions = {}) {
           setTimeout(() => {
             if (!this.destroyed) {
               this.stats.aborted = true;
+              observers.forEach((observer) => observer(request, reply));
               callbacks.onTimeout(this.stats, context, null);
             }
           }, config.timeout),
@@ -387,6 +387,12 @@ export function createMockCdn(options: MockCdnOptions = {}) {
           }
 
           this.stats.loading.first = this.stats.loading.end = window.performance.now();
+
+          // Observers are told when the response *arrives*, never when it was asked for. The
+          // harness models the buffer from what the CDN delivered, so notifying at request time
+          // would credit a slow fragment as buffered before a byte of it existed -- and a link too
+          // slow to keep up would never produce the stall it should.
+          observers.forEach((observer) => observer(request, reply));
 
           if (reply.status >= 200 && reply.status < 300 && reply.body !== undefined) {
             const wantsBinary = context.responseType === 'arraybuffer';
