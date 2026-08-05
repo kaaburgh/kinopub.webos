@@ -709,11 +709,10 @@ which now records it.
 >
 > They found one live defect immediately, now fixed: see **A20**.
 >
-> One limitation of the harness is worth knowing before writing a scenario against it: synthetic
-> segments are a fixed handful of bytes whatever bitrate their level declares, so hls.js's bandwidth
-> estimate is meaningless and its ABR choice flaps on a multi-level master. Every scenario here uses
-> a single level for that reason, and anything about level switching — including moving between
-> audio groups — is out of reach until segments are sized to their declared bitrate.
+> Multi-level scenarios work too: the mock reports each fragment at the size its level's declared
+> bitrate implies and takes a configurable link time to deliver it, so hls.js's bandwidth estimate
+> is meaningful and its level choice is deterministic. That covers quality switching, moving between
+> audio groups, and ABR adapting to a link that cannot carry the top rendition.
 >
 > What remains open is the browser build, and the scenarios it alone can cover: a seek into an
 > unbuffered region against the real CDN, bandwidth collapse driving real ABR, and confirming a
@@ -802,6 +801,20 @@ which now records it.
 > A third, cosmetic defect surfaced alongside: the stall watchdog's budget was capped at
 > `STALL_MAX_RELOADS * 2`, but its escalation ends on a restart, so the overlay could render "7/6".
 > The cap now matches the escalation.
+>
+> **A gap the scenario harness exposed, and a decision to make.** Once the harness stopped starting
+> playback on its own — the element now stays paused until the player calls `play()` on `canplay`,
+> as it does on the television — a stream that fails from its very _first_ segment turns out to
+> reach no failure notice at all. The stall watchdog stands down while `video.paused` is true, and
+> nothing has buffered, so `canplay` never fires and `play()` is never called; the watchdog
+> therefore never engages, its budget is never spent, and `getFailure()` requires a spent stall
+> budget before it will report anything. hls.js still escalates and the fatal budget still runs out,
+> but the viewer is left on a black screen indefinitely rather than being told.
+>
+> The scenarios stage their outages after playback is under way, which is the reported case and the
+> only one they can currently speak to. Whether the terminal state should also be reachable from a
+> spent _fatal_ budget alone is a change to the rule in `getFailure()`, argued at length when it was
+> written, and is deliberately not being made as a side effect of test work.
 >
 > The general question — which recoveries suit which error details — still wants episode data across
 > more failures.

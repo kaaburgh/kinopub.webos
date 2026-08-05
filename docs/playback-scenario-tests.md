@@ -48,12 +48,15 @@ HLS_DEBUG=1 yarn test --watchAll=false --testPathPattern=media.scenarios
 | ------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------- |
 | Healthy stream                       | Everything served                                     | The baseline: no recovery should engage at all                            |
 | Refused segments, retried then fatal | Every segment 502                                     | hls.js's own retry ladder, recorded so a change shows up                  |
-| Refused segments, every budget spent | Every segment 502, indefinitely                       | The terminal state and the failure notice                                 |
+| Refused segments, every budget spent | Segments 502 from partway on, indefinitely            | The terminal state and the failure notice                                 |
 | Escape a bad edge                    | One edge 502s; a playlist refetch yields another edge | Sentry: every request to `…ams-static-01` failed while `…-03` served 200s |
 | Recover without restarting the film  | Same, with alternate audio renditions declared        | Issue #18: a fifty-minute film restarting from zero                       |
 | Keep the chosen audio track          | Same, after the viewer picks a non-default track      | Issue #18: playback resuming in the wrong language                        |
 | Hanging edge                         | Connection accepted, never answered                   | The frozen picture with no error to react to                              |
 | Manual retry                         | Dead CDN, then healed, then the viewer presses retry  | The retry button on the failure notice                                    |
+| Buffer credited on delivery          | A throttled link, checked before the first arrival    | A property the multi-level scenarios rest on                              |
+| Keep the audio track across a switch | Healthy; the viewer changes quality to another level  | Audio groups ordered differently per level                                |
+| Adapt to a link that cannot keep up  | Healthy, but the link carries only the lower level    | hls.js's own ABR, and the player staying out of its way                   |
 
 ## Reading them after an hls.js upgrade
 
@@ -62,6 +65,15 @@ Each scenario asserts two separate things, and they mean different things when t
 **Assertions about hls.js.** How many non-fatal errors precede a fatal one; which `type / details`
 it reports; how long it waits before escalating. A failure here is not necessarily a defect — it is
 the upgrade telling you the library's behaviour changed. Read the new behaviour, then decide.
+
+hls.js documents that policy in its own tests, and
+[`tests/unit/controller/error-controller.ts`](https://github.com/video-dev/hls.js/blob/master/tests/unit/controller/error-controller.ts)
+is the fastest way to read the new version's rules — which errors are fatal, what is retried and how
+often — before working out why a scenario here changed. Its neighbours
+[`stream-controller.ts`](https://github.com/video-dev/hls.js/blob/master/tests/unit/controller/stream-controller.ts)
+and
+[`audio-track-controller.ts`](https://github.com/video-dev/hls.js/blob/master/tests/unit/controller/audio-track-controller.ts)
+cover the other two areas these scenarios lean on.
 
 **Assertions about the player.** Which recovery steps ran, whether playback survived, whether the
 position was preserved, what the episode report said. A failure here after an upgrade usually means
@@ -80,6 +92,25 @@ Two assertions are written specifically as upgrade tripwires:
   hls.js has **not** produced a fatal error inside a window in which the stall watchdog has already
   refetched the playlist twice. If a new version escalates inside that window, the watchdog may no
   longer be needed.
+
+## Scenarios with more than one level
+
+hls.js picks a level from a bandwidth estimate it derives from how long responses took and how many
+bytes they carried, so a multi-level scenario needs a link that costs something. Set `throughput`
+(bits per second) on the CDN options and the mock will report each fragment at the size its level's
+declared bitrate implies, and take the corresponding time to deliver it:
+
+```ts
+createPlaybackHarness({ cdn: { ...ADAPTIVE, throughput: 9000000 } });
+```
+
+The bytes are reported, not allocated — the demuxer only needs enough valid ADTS to parse, while the
+estimator only reads the count and the clock, so a 20 Mbps stream costs the suite nothing in memory.
+Without `throughput` the link is free, the estimate is meaningless, and hls.js's level choice flaps
+for reasons the scenario does not control. Single-level scenarios leave it unset and stay fast.
+
+Note that hls.js sorts levels by bitrate ascending, so `hls.levels[0]` is the _lowest_ rendition
+whatever order the manifest declared them in.
 
 ## Adding a scenario
 
@@ -101,14 +132,11 @@ the two tripwires above, where the number is the whole point and is documented a
   remux and buffering, but nothing here can detect a decoder problem — dropped frames, HDR
   behaviour, or the codec issues that only appear on the television's own hardware.
 - Playback progress is simulated from what the CDN delivered, so it is regular in a way real
-  playback is not.
-- **Anything involving more than one level is out of reach today.** Segments are a fixed handful of
-  bytes regardless of the bandwidth their level declares, so hls.js's bandwidth estimate bears no
-  relation to the manifest and its ABR choice flaps. A scenario written over a multi-level master
-  therefore passes or fails on that flapping rather than on what it meant to test — which also rules
-  out level switching, and with it anything that depends on moving between audio groups. Sizing
-  synthetic segments to their declared bitrate would fix this and is the natural next step for the
-  harness.
+  playback is not. It also follows the player rather than running alongside it: the element stays
+  paused until the component calls `play()` on `canplay`, as it does on the television. A scenario
+  that breaks the CDN before anything has buffered therefore never starts playing at all, and the
+  stall watchdog — which stands down while paused — never engages. Stage outages after playback is
+  under way unless that is the thing being tested.
 - The scenarios cover network failures. Failures of the TV itself (memory pressure, the webOS media
   pipeline, remote-control focus) are out of reach and stay manual — see
   [Playback diagnostics manual test](./playback-diagnostics-manual-test.md).
