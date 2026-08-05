@@ -70,6 +70,13 @@ jobs:
       - name: Build app
         run: yarn build
 
+      # The target browser is from around 2016 (`.browserslistrc`: chrome 35). A single arrow
+      # function reaching it means the bundle fails to parse and the screen stays black, with no
+      # error anyone can see. CRA transpiles dependencies as well as app code, but nothing announces
+      # it when that stops holding -- so the output is parsed as ES5 rather than assumed to be.
+      - name: Check the bundle is ES5
+        run: yarn check:es5
+
       - name: Package app
         run: yarn package
 

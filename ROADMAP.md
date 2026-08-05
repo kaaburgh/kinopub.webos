@@ -495,6 +495,21 @@ Ordered by priority, then by what unblocks what.
   item 1 records two different segments (`sn 57`, `sn 46`) failing on the same title and host while
   the opening of the file buffered normally.
 
+  **The hls.js upgrade changes the arithmetic, and the scenario tests measured it.** Against a
+  hanging edge on 1.0.10, hls.js produced non-fatal timeouts every twenty seconds and did not reach
+  a fatal error for about four and a half minutes; the watchdog acted at sixty seconds. That gap was
+  the whole case for having a watchdog. On 1.7.0-rc.2 the same scenario reaches a fatal error at
+  seventy seconds — hls.js abandons a silent request after `maxTimeToFirstByteMs` (ten seconds)
+  rather than the two-minute whole-response deadline, and its gap controller reports the frozen
+  picture itself as a non-fatal `bufferStalledError` at fifty seconds. The watchdog still moves
+  first, but by ten seconds instead of three minutes.
+
+  What has _not_ changed is the part that matters most: neither the timeouts nor `bufferStalledError`
+  make hls.js refetch the playlist, and fresh segment URLs are what actually moves a stream off a
+  dead edge. So the watchdog's reload still does something nothing else does — but its restart step,
+  which only re-plans against the same URLs, now overlaps almost entirely with hls.js's own
+  escalation and is the first candidate for removal if the device data supports it.
+
   **First real data, from a Sentry episode captured on the TV
   ([#18](https://github.com/kaaburgh/kinopub.webos/issues/18)).** Two things it settles and one it
   does not:

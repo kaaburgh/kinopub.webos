@@ -22,11 +22,11 @@ setup, the Yarn cache, and `yarn install --frozen-lockfile`.
 Runs on every pull request, on pushes to `master`, and on demand. Runs for
 superseded commits on the same branch or pull request are cancelled.
 
-| Job                    | What it does                                                                   | Local equivalent                                                |
-| ---------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Lint, format and types | ESLint, Prettier in check mode, `tsc --noEmit`, and the test runner            | `yarn lint && yarn format:check && yarn typecheck && yarn test` |
-| Docs links             | Verifies relative links between Markdown files resolve to existing files       | `yarn check:docs`                                               |
-| Build and package      | Builds the app, packages the IPKs, checks the installable IPK name, uploads it | `yarn build && yarn package`                                    |
+| Job                    | What it does                                                                                             | Local equivalent                                                |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Lint, format and types | ESLint, Prettier in check mode, `tsc --noEmit`, and the test runner                                      | `yarn lint && yarn format:check && yarn typecheck && yarn test` |
+| Docs links             | Verifies relative links between Markdown files resolve to existing files                                 | `yarn check:docs`                                               |
+| Build and package      | Builds the app, checks the bundle is ES5, packages the IPKs, checks the installable IPK name, uploads it | `yarn build && yarn check:es5 && yarn package`                  |
 
 Notes:
 
@@ -39,6 +39,13 @@ Notes:
   [Playback scenario tests](./playback-scenario-tests.md), which mount the real
   player over a scripted CDN. Those run under fake timers, so several minutes of
   stream time cost well under a second of CI time.
+- The ES5 check (`scripts/check-es5.js`) parses every built bundle with acorn at
+  `ecmaVersion: 5`. The target browser is from around 2016, so syntax it cannot
+  parse is not a degraded experience but a black screen with no visible error.
+  Create React App transpiles dependencies as well as application code, which is
+  what normally keeps this true; the check exists because nothing announces it
+  when that stops holding. Grepping the output does not work — `class`,
+  backticks and `?.` all occur inside string literals in a minified bundle.
 - The docs link check (`scripts/check-docs-links.js`) is plain Node.js with no
   dependencies and requests no external URLs; it only resolves relative links on
   disk. It exists because the documentation here cross-references itself
