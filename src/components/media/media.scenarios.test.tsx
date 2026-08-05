@@ -389,6 +389,34 @@ describe('playback scenarios', () => {
     harness.destroy();
   });
 
+  it('escalates when the element wedges with a little buffer still ahead of it', async () => {
+    // Taken from a capture on the television: playback stopped at 0.2 s of a sixty-five minute film
+    // with `readyState` 1 and two 0.6 s islands of buffer, one of them ahead of the playhead. hls.js
+    // reported `bufferAppendNoProgress` twice -- appended bytes were not becoming buffered range --
+    // and the player did nothing for two minutes, its recovery counter reading 0 of 6.
+    //
+    // The reason it did nothing is the sliver: half a second ahead of the playhead cleared the
+    // watchdog's threshold, so a wedged pipeline was indistinguishable from healthy playback.
+    const harness = createPlaybackHarness({ cdn: STREAM, autoPlay: true });
+
+    await harness.advance(30000);
+    expect(harness.steps).toEqual([]);
+
+    harness.playback.wedge();
+    await harness.advance(150000);
+
+    // hls.js notices, but only says so: none of this is fatal, and it never refetches a playlist.
+    expect(harness.hlsErrors.map((error) => error.reason)).toContain('mediaError / bufferStalledError');
+    expect(harness.hlsErrors.some((error) => error.fatal)).toBe(false);
+
+    // The player has to be the one that acts, and it has to reach an answer rather than sit there.
+    expect(actions(harness)).toEqual(expect.arrayContaining(['watchdog-restart', 'watchdog-reload']));
+    expect(harness.player.failure).toMatchObject({ kind: 'recovery-exhausted' });
+    expect(harness.player.recovery.attempts).toBeLessThanOrEqual(harness.player.recovery.limit);
+
+    harness.destroy();
+  });
+
   it('starts from a clean budget on a manual retry and resumes when the CDN recovers', async () => {
     const harness = createPlaybackHarness({ cdn: STREAM, autoPlay: true });
     const stopFailing = harness.cdn.intercept((request) =>

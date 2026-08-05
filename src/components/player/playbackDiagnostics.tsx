@@ -14,6 +14,7 @@ import { APP_VERSION } from 'utils/app';
 import { getLevelVideoRange, readDisplayDynamicRange } from 'utils/hdr';
 import { FailureCategory, formatCategoryLabel, getFailureCategory } from 'utils/hlsFailures';
 import { getLevelQualityHeight } from 'utils/hlsLevels';
+import { getPlaybackSessionId } from 'utils/logging';
 
 const HISTORY_LIMIT = 30;
 const VIDEO_EVENTS = ['playing', 'waiting', 'stalled', 'canplay', 'canplaythrough', 'seeking', 'seeked', 'error', 'ended'];
@@ -94,6 +95,8 @@ type BufferAppendStage = {
 type BufferAppendStagesByType = Record<string, BufferAppendStage>;
 
 type PlaybackSnapshot = {
+  /** Sentry `playback_id` for this attempt; searchable as `playback_id:XXXXXX`. */
+  sessionId?: string;
   currentTime: number;
   duration: number;
   paused: boolean;
@@ -422,6 +425,7 @@ function takeSnapshot(video: Nullable<HTMLVideoElement>, hls: Nullable<HLS>): Nu
   const mediaError = video.error;
 
   return {
+    sessionId: getPlaybackSessionId(),
     currentTime: video.currentTime,
     duration: video.duration,
     paused: video.paused,
@@ -911,6 +915,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
     const capture: ExportCapture = {
       capturedAt,
       appVersion: APP_VERSION,
+      sessionId: getPlaybackSessionId(),
       playback: video
         ? {
             currentTime: video.currentTime,
@@ -1051,7 +1056,12 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
   return (
     <div className="pointer-events-none absolute z-101 top-14 left-6 right-6 bottom-6 flex flex-col overflow-hidden rounded bg-black bg-opacity-80 p-4 text-gray-300 ring">
       <div className="mb-3 flex items-center justify-between">
-        <div className="text-2xl font-bold">Диагностика воспроизведения</div>
+        <div className="flex items-baseline">
+          <div className="text-2xl font-bold">Диагностика воспроизведения</div>
+          {/* The one value that connects this screen to Sentry. Kept beside the title rather than
+              buried in a column, because it is what someone photographs the screen for. */}
+          {snapshot?.sessionId && <div className="ml-4 font-mono text-xl text-green-400">id: {snapshot.sessionId}</div>}
+        </div>
         <div className="flex items-center">
           <Button className="pointer-events-auto mr-4 bg-gray-800 text-green-400" onClick={onExportToggle}>
             QR

@@ -66,6 +66,8 @@ export type ExportEvent = {
 export type ExportCapture = {
   capturedAt: number;
   appVersion?: string;
+  /** Sentry `playback_id` tag for this attempt, so a capture and its events can be matched up. */
+  sessionId?: string;
   playback?: {
     currentTime: number;
     duration: number;
@@ -171,7 +173,7 @@ function bool(value: boolean | undefined) {
 export function buildCompactText(capture: ExportCapture) {
   const lines: string[] = [];
 
-  lines.push(`v|${FORMAT_VERSION}|${capture.capturedAt}|${clean(capture.appVersion)}`);
+  lines.push(`v|${FORMAT_VERSION}|${capture.capturedAt}|${clean(capture.appVersion)}|${clean(capture.sessionId)}`);
 
   if (capture.playback) {
     const p = capture.playback;

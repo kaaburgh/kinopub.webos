@@ -10,7 +10,7 @@ import { VideoRange, getStreamVideoRange } from 'utils/hdr';
 import { getFailureCategory } from 'utils/hlsFailures';
 import { findLevelIndexForQuality } from 'utils/hlsLevels';
 import { provesStreamRecovered } from 'utils/hlsRecovery';
-import { logPlaybackIssue, resetPlaybackIssueReports, sentryEpisodeSink } from 'utils/logging';
+import { logPlaybackIssue, resetPlaybackIssueReports, sentryEpisodeSink, startPlaybackSession } from 'utils/logging';
 import { createPlaybackEpisodeTracker } from 'utils/playbackEpisode';
 import { convertToVTT } from 'utils/subtitles';
 
@@ -62,6 +62,10 @@ const RECOVERY_MAX_DELAY = 8000;
 // URLs, which is usually a different edge.
 const STALL_CHECK_INTERVAL = 2000;
 const STALL_MIN_BUFFER_AHEAD = 0.5;
+// `HTMLMediaElement.HAVE_FUTURE_DATA`. Named rather than inlined because the number on its own says
+// nothing, and the whole point of the check is that buffered ranges below this readiness are data
+// the element is not able to play.
+const MIN_PLAYABLE_READY_STATE = 3;
 const STALL_RESTART_AFTER = 8000;
 const STALL_RELOAD_AFTER = 20000;
 const STALL_MAX_RELOADS = 3;
@@ -195,6 +199,10 @@ function useVideoPlayer({
   // True only while a fatal-error retry is scheduled, so the watchdog can stand
   // aside without reading state it writes itself.
   const fatalRetryPendingRef = useRef(false);
+  // Set when hls.js reports that appended data is not turning into buffered range. That is a
+  // different failure from a starved buffer and needs a different remedy: fresh segment URLs cannot
+  // help a pipeline that is refusing the bytes it already has.
+  const bufferWedgedRef = useRef(false);
   const currentAudioTrackIndexRef = useRef(0);
   // Decode health is sampled continuously, not only while the diagnostics overlay is open, because
   // the indicator it drives is the whole point: a viewer should not have to open diagnostics to
@@ -445,12 +453,16 @@ function useVideoPlayer({
       fatalRecoveryRef.current = { attempts: 0, limit: RECOVERY_MAX_NETWORK_ATTEMPTS, exhausted: false };
       stallRecoveryRef.current = { attempts: 0, limit: STALL_MAX_ACTIONS, exhausted: false };
       fatalRetryPendingRef.current = false;
+      bufferWedgedRef.current = false;
       decodeSamplesRef.current = [];
       decodeErrorTimesRef.current = [];
       decodeHealthRef.current = EMPTY_DECODE_HEALTH;
       failureRef.current = undefined;
-      // A new source is a new playback session, so each issue is worth reporting once more.
+      // A new source is a new playback session, so each issue is worth reporting once more -- and
+      // gets its own id, so a photographed diagnostics screen and the Sentry events from the same
+      // attempt can be found from one another.
       resetPlaybackIssueReports();
+      startPlaybackSession();
       episodeRef.current.reset(Date.now());
 
       usesHlsRef.current = isHLSJSActive !== false && currentSrc.includes('.m3u8') && HLS.isSupported();
@@ -470,7 +482,11 @@ function useVideoPlayer({
         // instead of inheriting the attempts an already-survived outage used
         // up. See `provesStreamRecovered` for what does and does not count.
         hls.on(HLS.Events.FRAG_BUFFERED, (_event, data: any) => {
-          if (!provesStreamRecovered(data?.frag, recoveringStream)) {
+          // `FRAG_BUFFERED` means hls.js finished appending, not that the buffer grew. When it has
+          // just told us the append produced no progress, treating the event as proof of recovery
+          // would refill the retry budget on the strength of the very thing that is failing, and
+          // the escalation would never finish. Only real progress clears the flag, below.
+          if (bufferWedgedRef.current || !provesStreamRecovered(data?.frag, recoveringStream)) {
             return;
           }
 
@@ -483,6 +499,7 @@ function useVideoPlayer({
           recoveringStream = undefined;
           mediaRecoveryAttempts = 0;
           audioTrackReselected = false;
+          bufferWedgedRef.current = false;
 
           if (fatalRecoveryRef.current.attempts > 0 || fatalRecoveryRef.current.exhausted) {
             fatalRecoveryRef.current = { ...fatalRecoveryRef.current, attempts: 0, exhausted: false };
@@ -513,6 +530,15 @@ function useVideoPlayer({
             [data?.type, data?.details].filter(Boolean).join(' / '),
             hostnameOfFragment(data),
           );
+
+          // `bufferAppendNoProgress` is the one non-fatal error worth acting on. Everything else
+          // hls.js retries internally, and interfering there fights its own recovery -- but this one
+          // says appended bytes are not becoming buffered range, which no retry addresses. A capture
+          // from the TV showed it twice, ninety seconds before the player was still sitting on a
+          // black screen having attempted nothing at all.
+          if (data?.details === HLS.ErrorDetails.BUFFER_APPEND_ERROR || data?.details === 'bufferAppendNoProgress') {
+            bufferWedgedRef.current = true;
+          }
 
           // hls.js retries non-fatal errors internally; only fatal ones stop
           // the loading engine and need the application to restart it.
@@ -852,7 +878,17 @@ function useVideoPlayer({
       const advancing = lastPosition >= 0 && position !== lastPosition;
       lastPosition = position;
 
-      if (video.paused || video.ended || advancing || getBufferAhead(video) > STALL_MIN_BUFFER_AHEAD) {
+      // A buffer only counts as evidence of health if the element can actually play it. That
+      // qualifier is the whole fix for a failure captured on the TV: playback wedged at 0.2 s with
+      // `readyState` 1 and two 0.6 s islands of buffer, one of which happened to sit ahead of the
+      // playhead. Half a second ahead cleared the threshold below, so the watchdog concluded
+      // playback was fine and stood down -- for two minutes, while the screen stayed black and the
+      // recovery counter read 0 of 6. `HAVE_FUTURE_DATA` is the readiness the element itself uses
+      // to mean "I have something to play from here"; below it, buffered ranges are bytes the
+      // decoder has not accepted.
+      const hasPlayableBuffer = getBufferAhead(video) > STALL_MIN_BUFFER_AHEAD && video.readyState >= MIN_PLAYABLE_READY_STATE;
+
+      if (video.paused || video.ended || advancing || hasPlayableBuffer) {
         stalledSince = undefined;
         restarted = false;
 
@@ -861,6 +897,7 @@ function useVideoPlayer({
         // full budget rather than inheriting an already-survived one.
         actions = 0;
         reloads = 0;
+        bufferWedgedRef.current = false;
 
         if (stallRecoveryRef.current.exhausted || stallRecoveryRef.current.attempts > 0) {
           stallRecoveryRef.current = { attempts: 0, limit: STALL_MAX_ACTIONS, exhausted: false };
@@ -877,6 +914,14 @@ function useVideoPlayer({
       }
 
       const stalledFor = now - stalledSince;
+
+      // Re-planning cannot help a pipeline that is refusing the bytes it already holds, so when
+      // hls.js has reported no progress on append, spend the step on the playlist reload instead.
+      // That one triggers `BUFFER_RESET`, which tears down the source buffers and builds new ones --
+      // the only thing here that gives a wedged decoder a fresh start.
+      if (!restarted && bufferWedgedRef.current) {
+        restarted = true;
+      }
 
       // First, just ask hls.js to re-plan from where playback actually is.
       if (!restarted && stalledFor >= STALL_RESTART_AFTER) {

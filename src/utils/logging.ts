@@ -28,6 +28,41 @@ Sentry.init({
   maxBreadcrumbs: 100,
 });
 
+/**
+ * Ties one playback attempt to everything it reported.
+ *
+ * Sentry has no notion of "this viewing", and its own session id is neither shown to a viewer nor
+ * searchable in a useful way. So the player mints its own: short enough to read off a television
+ * screen and type into Sentry's search (`playback_id:XXXXXX`), and set as a tag on the global scope
+ * so every breadcrumb, issue and episode report from that attempt carries it. The diagnostics
+ * overlay shows the same value, which is what makes a photographed screen and a Sentry event
+ * findable from each other.
+ *
+ * The alphabet omits characters that are read wrong off a panel: no O/0, no I/1, no S/5.
+ */
+const PLAYBACK_ID_ALPHABET = 'ABCDEFGHJKLMNPQRTUVWXYZ2346789';
+const PLAYBACK_ID_LENGTH = 6;
+
+let playbackSessionId: string | undefined;
+
+export function startPlaybackSession() {
+  let id = '';
+
+  for (let index = 0; index < PLAYBACK_ID_LENGTH; index += 1) {
+    id += PLAYBACK_ID_ALPHABET[Math.floor(Math.random() * PLAYBACK_ID_ALPHABET.length)];
+  }
+
+  playbackSessionId = id;
+  Sentry.configureScope((scope) => scope.setTag('playback_id', id));
+
+  return id;
+}
+
+/** The current attempt's id, or undefined before playback has started. */
+export function getPlaybackSessionId() {
+  return playbackSessionId;
+}
+
 const URL_PATTERN = /\bhttps?:\/\/[^\s"'<>]+/gi;
 
 function hostnameOf(url: string) {

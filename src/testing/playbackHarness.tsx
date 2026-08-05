@@ -64,6 +64,13 @@ export type PlaybackHarness = {
     play: () => void;
     pause: () => void;
     seek: (position: number) => void;
+    /**
+     * Wedges the element the way the television did: appends keep being accepted but stop producing
+     * buffered range, and playback stops advancing even though a little is still buffered ahead of
+     * the playhead. Reported as `readyState: 1`, which is what a capture from the TV showed, and
+     * what tells a wedged pipeline apart from a starved one.
+     */
+    wedge: () => void;
     readonly position: number;
     readonly bufferedEnd: number;
   };
@@ -116,6 +123,7 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
   // has restarted from a new position, which discards what came before.
   let bufferStart = 0;
   let bufferEnd = 0;
+  let wedged = false;
   let announcedCanPlay = false;
   let sourceBuffers: StubSourceBuffer[] = [];
 
@@ -136,10 +144,19 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
 
     sourceBuffers.push(sourceBuffer);
     publishBuffer();
+
+    // A wedged decoder does not un-wedge because hls.js rebuilt the media source, so buffers
+    // created while wedged are frozen too. Without this the reload step looks like it worked.
+    if (wedged) {
+      sourceBuffer.freeze();
+    }
   });
 
   cdn.observe((request, reply) => {
-    if (request.kind !== 'fragment' || 'hang' in reply || reply.status < 200 || reply.status >= 300) {
+    // A wedged element still accepts appends, it just stops turning them into buffered range. The
+    // element and the source buffer have to agree about that or hls.js sees a growing buffer on one
+    // and a frozen one on the other, and never notices anything is wrong.
+    if (wedged || request.kind !== 'fragment' || 'hang' in reply || reply.status < 200 || reply.status >= 300) {
       return;
     }
 
@@ -218,7 +235,7 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
   // fetched the entire film.
   Object.defineProperty(video, 'readyState', {
     configurable: true,
-    get: () => (bufferEnd > video.currentTime + 0.001 ? 4 : bufferEnd > bufferStart ? 2 : 0),
+    get: () => (wedged ? 1 : bufferEnd > video.currentTime + 0.001 ? 4 : bufferEnd > bufferStart ? 2 : 0),
   });
 
   let attachedTo: HLS | null = null;
@@ -277,7 +294,7 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
       // simulation that overwrote those moves would hide the restart bug it exists to catch.
       position = video.currentTime;
 
-      if (playing) {
+      if (playing && !wedged) {
         // Playback cannot run past the end of the buffer -- that is precisely what a stall is.
         position = Math.max(position, Math.min(position + stepMs / 1000, bufferEnd));
         video.currentTime = position;
@@ -317,6 +334,14 @@ export function createPlaybackHarness(options: HarnessOptions = {}): PlaybackHar
       seek: (to: number) => {
         position = to;
         video.currentTime = to;
+      },
+      wedge: () => {
+        wedged = true;
+        // Leave a sliver ahead of the playhead, which is what made the captured state so hard for
+        // the player to see: there was buffer, so nothing looked starved.
+        bufferEnd = Math.min(bufferEnd, position + 0.6);
+        publishBuffer();
+        sourceBuffers.forEach((sourceBuffer) => sourceBuffer.freeze());
       },
       get position() {
         return position;

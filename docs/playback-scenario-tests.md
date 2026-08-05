@@ -57,6 +57,7 @@ HLS_DEBUG=1 yarn test --watchAll=false --testPathPattern=media.scenarios
 | Buffer credited on delivery          | A throttled link, checked before the first arrival    | A property the multi-level scenarios rest on                              |
 | Keep the audio track across a switch | Healthy; the viewer changes quality to another level  | Audio groups ordered differently per level                                |
 | Adapt to a link that cannot keep up  | Healthy, but the link carries only the lower level    | hls.js's own ABR, and the player staying out of its way                   |
+| Element wedges mid-playback          | Appends accepted but producing no buffered range      | A capture from the TV: black screen, 0 of 6 attempts, two minutes         |
 
 ## Reading them after an hls.js upgrade
 
