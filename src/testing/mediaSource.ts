@@ -26,6 +26,7 @@ export class StubSourceBuffer {
   appendedBytes = 0;
   removed = false;
 
+  private frozen = false;
   private ranges: { start: number; end: number }[] = [];
   private listeners: Record<string, Listener[]> = {};
 
@@ -48,7 +49,20 @@ export class StubSourceBuffer {
    * so the scenario says what buffering a fragment was worth.
    */
   setBufferedRange(start: number, end: number) {
+    if (this.frozen) {
+      return;
+    }
+
     this.ranges = end > start ? [{ start, end }] : [];
+  }
+
+  /**
+   * Keeps accepting appends while reporting no new buffered range, the way a decoder that has
+   * stopped coping does. hls.js watches for exactly this and reports `bufferAppendNoProgress`, so a
+   * scenario can provoke that error rather than fake it.
+   */
+  freeze() {
+    this.frozen = true;
   }
 
   addEventListener(type: string, fn: Listener) {

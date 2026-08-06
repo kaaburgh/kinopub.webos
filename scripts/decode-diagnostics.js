@@ -148,6 +148,8 @@ function parseCompactText(text) {
       report.formatVersion = Number(parts[1]);
       report.capturedAt = Number(parts[2]);
       report.appVersion = optional(parts[3]);
+      // Appended in a later build; older captures simply do not carry it.
+      report.sessionId = optional(parts[4]);
       clock = report.capturedAt;
     } else if (tag === 'p') {
       report.playback = {
@@ -239,7 +241,10 @@ function formatReport(report) {
   const lines = [];
   const at = (ms) => new Date(ms).toISOString().replace('T', ' ').replace('Z', '');
 
-  lines.push(`format v${report.formatVersion}  app ${report.appVersion || 'n/a'}  captured ${at(report.capturedAt)}`);
+  lines.push(
+    `format v${report.formatVersion}  app ${report.appVersion || 'n/a'}  captured ${at(report.capturedAt)}` +
+      (report.sessionId ? `  playback_id ${report.sessionId}` : ''),
+  );
 
   if (report.playback) {
     const p = report.playback;
