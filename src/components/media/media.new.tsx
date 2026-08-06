@@ -10,7 +10,7 @@ import { VideoRange, getStreamVideoRange } from 'utils/hdr';
 import { getFailureCategory } from 'utils/hlsFailures';
 import { findLevelIndexForQuality } from 'utils/hlsLevels';
 import { provesStreamRecovered } from 'utils/hlsRecovery';
-import { logPlaybackIssue, resetPlaybackIssueReports, sentryEpisodeSink, startPlaybackSession } from 'utils/logging';
+import { endPlaybackSession, logPlaybackIssue, resetPlaybackIssueReports, sentryEpisodeSink, startPlaybackSession } from 'utils/logging';
 import { createPlaybackEpisodeTracker } from 'utils/playbackEpisode';
 import { convertToVTT } from 'utils/subtitles';
 
@@ -458,12 +458,14 @@ function useVideoPlayer({
       decodeErrorTimesRef.current = [];
       decodeHealthRef.current = EMPTY_DECODE_HEALTH;
       failureRef.current = undefined;
-      // A new source is a new playback session, so each issue is worth reporting once more -- and
-      // gets its own id, so a photographed diagnostics screen and the Sentry events from the same
-      // attempt can be found from one another.
+      // A new source is a new playback session, so each issue is worth reporting once more.
       resetPlaybackIssueReports();
-      startPlaybackSession();
+      // Close the outgoing episode *before* minting the new id. `reset` can emit the previous
+      // attempt's abandonment report synchronously, and Sentry reads the tag off the global scope
+      // as it sends -- so starting the session first would file the failed attempt's own report
+      // under the id of the one that replaced it, and the id on screen would find nothing.
       episodeRef.current.reset(Date.now());
+      startPlaybackSession();
 
       usesHlsRef.current = isHLSJSActive !== false && currentSrc.includes('.m3u8') && HLS.isSupported();
 
@@ -820,6 +822,9 @@ function useVideoPlayer({
 
     return () => {
       episode.reset(Date.now(), 'teardown');
+      // Ordered after the report for the same reason the source-change path is: the teardown
+      // episode belongs to the attempt that is ending, not to whatever the viewer does next.
+      endPlaybackSession();
     };
   }, []);
 
