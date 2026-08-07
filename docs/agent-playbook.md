@@ -40,16 +40,16 @@ This document expands the repository-wide rules in [`AGENTS.md`](../AGENTS.md). 
 
 ## Choosing the next source to read
 
-| Change area | Read before editing | Minimum focused validation |
-| --- | --- | --- |
-| Playback recovery, stalls, hls.js | `ROADMAP.md`, playback scenario guide, relevant scenario and pure-rule tests | focused unit tests + `media.scenarios` |
-| Diagnostics or QR export | diagnostics spec, manual test, decoder script | diagnostics/export tests + `yarn check:docs` |
-| Quality or audio selection | roadmap history for the item, `hlsLevels`, scenarios covering switches/recovery | unit tests + relevant scenarios |
-| Subtitle/HDR behaviour | roadmap evidence and manual test; distinguish manifest evidence from codec guesses | unit tests where possible; TV validation remains explicit |
-| API/reporting | API failure rules, logging privacy rules, OAuth call sites | focused tests + typecheck |
-| Remote keys/navigation | `utils/keyboard.ts`, registration hooks, all handlers for the same key | focused tests if present + manual interaction plan |
-| Build, dependencies, browser APIs | build/install guide, CI guide, browserslist, polyfills | build + ES5 check; package when packaging can change |
-| Documentation only | linked source docs and `scripts/check-docs-links.js` expectations | format check + docs link check |
+| Change area                       | Read before editing                                                                | Minimum focused validation                                |
+| --------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Playback recovery, stalls, hls.js | `ROADMAP.md`, playback scenario guide, relevant scenario and pure-rule tests       | focused unit tests + `media.scenarios`                    |
+| Diagnostics or QR export          | diagnostics spec, manual test, decoder script                                      | diagnostics/export tests + `yarn check:docs`              |
+| Quality or audio selection        | roadmap history for the item, `hlsLevels`, scenarios covering switches/recovery    | unit tests + relevant scenarios                           |
+| Subtitle/HDR behaviour            | roadmap evidence and manual test; distinguish manifest evidence from codec guesses | unit tests where possible; TV validation remains explicit |
+| API/reporting                     | API failure rules, logging privacy rules, OAuth call sites                         | focused tests + typecheck                                 |
+| Remote keys/navigation            | `utils/keyboard.ts`, registration hooks, all handlers for the same key             | focused tests if present + manual interaction plan        |
+| Build, dependencies, browser APIs | build/install guide, CI guide, browserslist, polyfills                             | build + ES5 check; package when packaging can change      |
+| Documentation only                | linked source docs and `scripts/check-docs-links.js` expectations                  | format check + docs link check                            |
 
 ## Investigation workflow
 
