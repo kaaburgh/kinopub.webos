@@ -422,8 +422,9 @@ describe('playback scenarios', () => {
         readyState: 1,
         networkState: expect.any(Number),
         seeking: expect.any(Boolean),
-        currentTime: expect.any(Number),
-        bufferedRanges: expect.any(String),
+        bufferAhead: expect.any(Number),
+        bufferedRangeCount: expect.any(Number),
+        playableBuffer: false,
         latestHlsError: {
           category: 'buffer',
           reason: 'mediaError / bufferStalledError',
@@ -433,6 +434,8 @@ describe('playback scenarios', () => {
         watchdog: expect.objectContaining({ actions: expect.any(Number) }),
       },
     });
+    expect(harness.episodes[0].context).not.toHaveProperty('currentTime');
+    expect(harness.episodes[0].context).not.toHaveProperty('bufferedRanges');
 
     harness.destroy();
   });

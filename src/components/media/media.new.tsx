@@ -119,25 +119,6 @@ function getBufferAhead(video: HTMLVideoElement) {
   return 0;
 }
 
-function getBufferedRanges(video: HTMLVideoElement) {
-  const ranges: string[] = [];
-
-  for (let index = 0; index < video.buffered.length; index += 1) {
-    try {
-      const start = roundPlaybackValue(video.buffered.start(index));
-      const end = roundPlaybackValue(video.buffered.end(index));
-
-      if (start !== undefined && end !== undefined) {
-        ranges.push(`${start}-${end}`);
-      }
-    } catch (e) {
-      return ranges.join(',');
-    }
-  }
-
-  return ranges.join(',');
-}
-
 export type RecoveryState = {
   attempts: number;
   // The cap that applies to `attempts`, which differs between network and
@@ -477,9 +458,8 @@ function useVideoPlayer({
       readyState,
       networkState: video?.networkState,
       seeking: video ? Boolean(video.seeking) : undefined,
-      currentTime: video ? roundPlaybackValue(video.currentTime) : undefined,
       bufferAhead: bufferAhead === undefined ? undefined : roundPlaybackValue(bufferAhead),
-      bufferedRanges: video ? getBufferedRanges(video) : undefined,
+      bufferedRangeCount: video?.buffered.length,
       playableBuffer:
         video && bufferAhead !== undefined
           ? bufferAhead > STALL_MIN_BUFFER_AHEAD && readyState !== undefined && readyState >= MIN_PLAYABLE_READY_STATE
@@ -993,7 +973,7 @@ function useVideoPlayer({
         episodeRef.current.notePlaybackProgress(Date.now());
       }
 
-      if (video.paused || video.ended || advancing || hasPlayableBuffer) {
+      if (video.paused || video.ended || meaningfullyAdvancing || hasPlayableBuffer) {
         stalledSince = undefined;
         restarted = false;
 
@@ -1037,7 +1017,7 @@ function useVideoPlayer({
           lastReason: 'stall / restart',
           lastAt: now,
         };
-        episodeRef.current.noteAction('watchdog-restart', now, { stalledForMs: stalledFor, position: Math.round(position) });
+        episodeRef.current.noteAction('watchdog-restart', now, { stalledForMs: stalledFor });
         episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
         hls.startLoad(position);
         return;
@@ -1066,7 +1046,7 @@ function useVideoPlayer({
       actions += 1;
       stalledSince = now;
       restarted = false;
-      episodeRef.current.noteAction('watchdog-reload', now, { reload: reloads, limit: STALL_MAX_RELOADS, position: Math.round(position) });
+      episodeRef.current.noteAction('watchdog-reload', now, { reload: reloads, limit: STALL_MAX_RELOADS });
       episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
       stallRecoveryRef.current = {
         attempts: actions,

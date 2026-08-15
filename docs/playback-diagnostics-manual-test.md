@@ -261,9 +261,10 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
   last — this is what says which recovery path works.
 - Confirm exactly one event is sent per episode, not one per error.
 - Confirm the persistent-wedge event carries `playback_id`, selected quality and HLS level state,
-  ready/network state, seeking and position, compact buffered ranges, the latest HLS error, and
-  recovery/watchdog state. Confirm that appends alone do not close the episode while the media
-  element remains unplayable.
+  ready/network state, seeking, buffer-ahead duration, buffered-range count, the latest HLS error,
+  and recovery/watchdog state. Confirm that exact playback position and absolute buffered ranges are
+  absent because they are personal viewing data, and that appends alone do not close the episode
+  while the media element remains unplayable.
 - Stall a stream, then press Back while recovery is still running. Confirm an event arrives with
   `playback_episode_ended_by: teardown` at `warning` level, carrying the breadcrumbs collected so
   far. Nothing was reported for this case before, so an absent event is the regression.

@@ -541,9 +541,10 @@ faster than time passes, so the abandoned episode would never be reported at all
 Failures the player tries to recover from, including persistent non-fatal wedges, are reported _only_
 as episodes. The standalone `logPlaybackIssue` path is limited to `decode-health-severe`, which is
 not an episode; sending both would tell the same story twice and spend twice the quota. The episode
-context includes quality, streaming type, HLS level state, ready/network state, seeking and position,
-compact buffered ranges, the latest categorised HLS error, and fatal/watchdog recovery state. It
-contains hostnames only and never the stream URL.
+context includes quality, streaming type, HLS level state, ready/network state, seeking, buffer-ahead
+duration, buffered-range count, the latest categorised HLS error, and fatal/watchdog recovery state.
+It contains hostnames only and never the stream URL, exact playback position, or absolute buffered
+ranges: those are personal viewing data and stay on the television.
 
 The state machine is in `src/utils/playbackEpisode.ts` with unit tests; `sentryEpisodeSink` in
 `src/utils/logging.ts` is the only part that touches Sentry.
