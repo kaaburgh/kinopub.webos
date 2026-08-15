@@ -481,13 +481,16 @@ Reported conditions, all of them states the player could not resolve on its own:
 - `fatal-media-recovery-exhausted`
 - `fatal-unrecoverable`
 - `stall-watchdog-exhausted`
+- persistent non-fatal playback wedge (episode trigger `persistent-wedge`)
 - `decode-health-severe`
 
 ### Recovery episodes
 
 A single error report cannot answer the question that matters — _did the recovery work?_ — because
 the answer is in what happens next. So failures are tracked as **episodes**: everything between the
-first fatal error and the moment playback either resumes or is given up on.
+first fatal error, recovery action, or persistent non-playable state and the moment playback either
+resumes or is given up on. The stall watchdog opens an episode after the existing 8 s persistence
+threshold, even when hls.js has emitted only non-fatal errors and no recovery action has run yet.
 
 Each recovery step becomes a Sentry breadcrumb (`fatal-retry`, `media-recover`, `watchdog-restart`,
 `watchdog-reload`, `… budget exhausted`), and one event is sent when the episode concludes:
@@ -521,22 +524,26 @@ exactly the early context that explains the episode. Repeated errors are therefo
 summarised at most once every 10 s, while the rare, meaningful steps are recorded individually. The
 full per-category counts still travel in the episode summary.
 
-An episode is resolved by the _same evidence that refills the retry budget_: a media fragment
-buffering on the stream that was failing (`provesStreamRecovered`). Position moving is deliberately
-not enough. A fatal error stops hls.js's loading engine, so playback carrying on afterwards is the
-buffer draining, and crediting that to whichever retry happened to be in flight would make
-`playback_recovered_after` — the one field worth grouping on — lie. The episode also stays open
-until a recovery action has actually been attempted, otherwise one failure arrives as two unrelated
-reports.
+An episode started by fatal recovery is resolved by the _same evidence that refills the retry budget_:
+a media fragment buffering on the stream that was failing (`provesStreamRecovered`). Position moving
+is deliberately not enough. A fatal error stops hls.js's loading engine, so playback carrying on
+afterwards is the buffer draining, and crediting that to whichever retry happened to be in flight
+would make `playback_recovered_after` — the one field worth grouping on — lie. A persistent-wedge
+episode uses stricter evidence: the media element must actually advance from playable buffer;
+`FRAG_BUFFERED` alone is not enough because a webOS pipeline can accept appends without producing a
+playable range. If the viewer leaves first, the same episode is closed as `teardown`, rather than
+creating a second standalone event.
 
 Arming the abandonment deadline is idempotent per budget. The watchdog re-enters its exhausted
 branch on every tick while playback stays stalled, and re-arming there would push the deadline out
 faster than time passes, so the abandoned episode would never be reported at all.
 
-Failures the player tries to recover from are reported _only_ as episodes. The standalone
-`logPlaybackIssue` path is limited to `decode-health-severe`, which is not an episode; sending both
-would tell the same story twice and spend twice the quota. The stream context those reports carried
-— quality, streaming type, level count, bandwidth estimate — moves onto the episode summary.
+Failures the player tries to recover from, including persistent non-fatal wedges, are reported _only_
+as episodes. The standalone `logPlaybackIssue` path is limited to `decode-health-severe`, which is
+not an episode; sending both would tell the same story twice and spend twice the quota. The episode
+context includes quality, streaming type, HLS level state, ready/network state, seeking and position,
+compact buffered ranges, the latest categorised HLS error, and fatal/watchdog recovery state. It
+contains hostnames only and never the stream URL.
 
 The state machine is in `src/utils/playbackEpisode.ts` with unit tests; `sentryEpisodeSink` in
 `src/utils/logging.ts` is the only part that touches Sentry.

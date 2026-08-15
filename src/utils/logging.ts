@@ -284,6 +284,7 @@ export const sentryEpisodeSink: EpisodeSink = {
   report: (summary: EpisodeSummary) => {
     Sentry.withScope((scope) => {
       scope.setTag('playback_episode', summary.outcome);
+      scope.setTag('playback_episode_trigger', summary.trigger);
 
       if (summary.lastReason) {
         scope.setTag('playback_reason', summary.lastReason);

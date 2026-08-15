@@ -1,6 +1,7 @@
 /**
- * Tracks a playback *recovery episode* — everything between the first failure and the moment
- * playback either resumes or is given up on — so the whole chain reaches Sentry as one report.
+ * Tracks a playback *recovery episode* — everything between the first fatal/recovery signal or
+ * persistent wedge and the moment playback either resumes or is given up on — so the whole chain
+ * reaches Sentry as one report.
  *
  * The motivating question is "does the stall watchdog's playlist reload actually rescue playback?"
  * A single error report cannot answer it, because the answer is in what happens afterwards. So each
@@ -11,10 +12,13 @@
  * errors a second; breadcrumbing each one would fill Sentry's 100-entry buffer in about half a
  * minute and evict exactly the early context that explains the episode. Repeated errors are
  * therefore counted and summarised on a timer, while the rare, meaningful steps — a fatal error, a
- * recovery action, a budget running out — are recorded individually.
+ * persistent wedge, a recovery action, or a budget running out — are recorded individually.
  */
 
 export type EpisodeOutcome = 'recovered' | 'abandoned';
+
+/** What caused this episode to become reportable. */
+export type EpisodeTrigger = 'fatal-error' | 'recovery-action' | 'persistent-wedge';
 
 /**
  * How the episode came to an end.
@@ -47,6 +51,8 @@ export type EpisodeSummary = {
   outcome: EpisodeOutcome;
   /** Which of the endings above produced this report. */
   endedBy: EpisodeEnd;
+  /** The first signal that made this failure worth tracking. */
+  trigger: EpisodeTrigger;
   startedAt: number;
   endedAt: number;
   durationMs: number;
@@ -81,11 +87,12 @@ export const EPISODE_ABANDON_GRACE_MS = 30000;
 /** Minimum gap between "N errors so far" breadcrumbs, so a flood cannot evict the useful trail. */
 export const EPISODE_ERROR_SUMMARY_INTERVAL_MS = 10000;
 
-/** An episode that has produced nothing but a single blip is not worth an event. */
+/** A recovery episode that has produced nothing but a single blip is not worth an event. */
 export const EPISODE_MIN_FATALS_TO_REPORT = 1;
 
 export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
   let startedAt: number | undefined;
+  let trigger: EpisodeTrigger | undefined;
   let fatalCount = 0;
   let errorCounts: Record<string, number> = {};
   let actions: string[] = [];
@@ -96,9 +103,11 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
   let lastErrorSummaryAt = 0;
   let unsummarisedErrors = 0;
   let context: Record<string, unknown> | undefined;
+  let persistentWedge = false;
 
   function reset() {
     startedAt = undefined;
+    trigger = undefined;
     fatalCount = 0;
     errorCounts = {};
     actions = [];
@@ -109,11 +118,13 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
     lastErrorSummaryAt = 0;
     unsummarisedErrors = 0;
     context = undefined;
+    persistentWedge = false;
   }
 
-  function begin(now: number) {
+  function begin(now: number, episodeTrigger: EpisodeTrigger) {
     if (startedAt === undefined) {
       startedAt = now;
+      trigger = episodeTrigger;
       lastErrorSummaryAt = now;
       sink.breadcrumb({ category: 'playback', message: 'recovery episode started', level: 'warning' });
     }
@@ -127,6 +138,7 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
     const summary: EpisodeSummary = {
       outcome,
       endedBy,
+      trigger: trigger || 'recovery-action',
       startedAt,
       endedAt: now,
       durationMs: now - startedAt,
@@ -140,18 +152,20 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
       context,
     };
 
+    const shouldReport = summary.fatalCount >= EPISODE_MIN_FATALS_TO_REPORT || summary.exhausted.length > 0 || persistentWedge;
+
     reset();
 
-    if (summary.fatalCount >= EPISODE_MIN_FATALS_TO_REPORT || summary.exhausted.length > 0) {
+    if (shouldReport) {
       sink.report(summary);
     }
   }
 
   return {
-    /** Any hls.js error, fatal or not. Only fatals open an episode; the rest are counted. */
+    /** Any hls.js error, fatal or not. Fatals open an episode; non-fatals are counted once one is active. */
     noteError(category: string, now: number, fatal: boolean, reason?: string, errorHost?: string) {
       if (fatal) {
-        begin(now);
+        begin(now, 'fatal-error');
       }
 
       // Only errors inside the episode belong in its summary. Counting the quiet ones that happen
@@ -196,9 +210,32 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
       context = next;
     },
 
+    /**
+     * A non-playable state that survived the watchdog's persistence threshold is a failure in its
+     * own right, even when hls.js never escalates it to fatal and the application has not acted yet.
+     * Repeated calls are intentionally cheap and do not add more breadcrumbs.
+     */
+    noteWedge(now: number, reason?: string, errorHost?: string) {
+      const alreadyObserved = persistentWedge;
+
+      begin(now, 'persistent-wedge');
+      persistentWedge = true;
+      lastReason = reason || lastReason;
+      host = errorHost || host;
+
+      if (!alreadyObserved) {
+        sink.breadcrumb({
+          category: 'playback',
+          message: 'persistent playback wedge observed',
+          level: 'warning',
+          data: { reason, host: errorHost },
+        });
+      }
+    },
+
     /** A recovery step the application took. */
     noteAction(action: string, now: number, data?: Record<string, unknown>) {
-      begin(now);
+      begin(now, 'recovery-action');
       actions.push(action);
       sink.breadcrumb({ category: 'playback', message: action, level: 'info', data });
 
@@ -228,7 +265,7 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
      * two seconds so the abandoned episode would never be reported at all.
      */
     noteExhausted(which: string, now: number, reason?: string) {
-      begin(now);
+      begin(now, 'recovery-action');
 
       if (exhausted.includes(which)) {
         return;
@@ -247,18 +284,32 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
      * worked; this is what makes `playback_recovered_after` in Sentry meaningful.
      */
     noteProgress(now: number, after?: string) {
-      if (startedAt === undefined) {
+      if (startedAt === undefined || (!persistentWedge && actions.length === 0 && exhausted.length === 0)) {
         return;
       }
 
       // A fatal error stops hls.js's loading engine, so playback carrying on straight afterwards is
       // the buffer draining, not a recovery. Keep the episode open until something has actually
-      // been attempted, or the two halves of one failure arrive as two unrelated reports.
-      if (actions.length === 0 && exhausted.length === 0) {
+      // been attempted, or a persistent non-playable state has been observed. The latter is
+      // already a user-visible failure even when no recovery action was possible yet.
+
+      const credit = after || actions[actions.length - 1] || (persistentWedge ? 'persistent-wedge' : undefined);
+
+      sink.breadcrumb({ category: 'playback', message: 'playback resumed', level: 'info', data: { after: credit } });
+      finish('recovered', now, 'progress', credit);
+    },
+
+    /**
+     * Real media progress, as opposed to an hls.js append notification. A persistent wedge can
+     * produce `FRAG_BUFFERED` while the media element remains unplayable, so the watchdog uses this
+     * path to close that episode only after the element is advancing from playable buffer.
+     */
+    notePlaybackProgress(now: number, after?: string) {
+      if (startedAt === undefined || !persistentWedge) {
         return;
       }
 
-      const credit = after || actions[actions.length - 1];
+      const credit = after || actions[actions.length - 1] || 'persistent-wedge';
 
       sink.breadcrumb({ category: 'playback', message: 'playback resumed', level: 'info', data: { after: credit } });
       finish('recovered', now, 'progress', credit);
@@ -289,6 +340,10 @@ export function createPlaybackEpisodeTracker(sink: EpisodeSink) {
 
     isActive() {
       return startedAt !== undefined;
+    },
+
+    isPersistentWedge() {
+      return persistentWedge;
     },
   };
 }

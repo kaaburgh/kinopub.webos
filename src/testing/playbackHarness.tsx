@@ -49,8 +49,8 @@ export type PlaybackHarness = {
   readonly hlsErrors: HlsErrorRecord[];
   /**
    * Every recovery step the player recorded, in order. Episodes are only reported once they
-   * conclude and only when a fatal error was involved, so this is the way to see what a non-fatal
-   * outage made the player do -- and when, relative to hls.js's own errors.
+   * conclude. Persistent non-fatal wedges now produce an episode even without a fatal error, so
+   * this is the way to see what the player did -- and when, relative to hls.js's own errors.
    */
   readonly steps: RecoveryStep[];
   /** Runs the player's own manual-retry path, wrapped so React state updates settle. */

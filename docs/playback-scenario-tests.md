@@ -44,20 +44,20 @@ HLS_DEBUG=1 yarn test --watchAll=false --testPathPattern=media.scenarios
 
 ## What each scenario stages
 
-| Scenario                             | Network condition                                     | Taken from                                                                |
-| ------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| Healthy stream                       | Everything served                                     | The baseline: no recovery should engage at all                            |
-| Refused segments, retried then fatal | Every segment 502                                     | hls.js's own retry ladder, recorded so a change shows up                  |
-| Refused segments, every budget spent | Segments 502 from partway on, indefinitely            | The terminal state and the failure notice                                 |
-| Escape a bad edge                    | One edge 502s; a playlist refetch yields another edge | Sentry: every request to `…ams-static-01` failed while `…-03` served 200s |
-| Recover without restarting the film  | Same, with alternate audio renditions declared        | Issue #18: a fifty-minute film restarting from zero                       |
-| Keep the chosen audio track          | Same, after the viewer picks a non-default track      | Issue #18: playback resuming in the wrong language                        |
-| Hanging edge                         | Connection accepted, never answered                   | The frozen picture with no error to react to                              |
-| Manual retry                         | Dead CDN, then healed, then the viewer presses retry  | The retry button on the failure notice                                    |
-| Buffer credited on delivery          | A throttled link, checked before the first arrival    | A property the multi-level scenarios rest on                              |
-| Keep the audio track across a switch | Healthy; the viewer changes quality to another level  | Audio groups ordered differently per level                                |
-| Adapt to a link that cannot keep up  | Healthy, but the link carries only the lower level    | hls.js's own ABR, and the player staying out of its way                   |
-| Element wedges mid-playback          | Appends accepted but producing no buffered range      | A capture from the TV: black screen, 0 of 6 attempts, two minutes         |
+| Scenario                             | Network condition                                     | Taken from                                                                                               |
+| ------------------------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Healthy stream                       | Everything served                                     | The baseline: no recovery should engage at all                                                           |
+| Refused segments, retried then fatal | Every segment 502                                     | hls.js's own retry ladder, recorded so a change shows up                                                 |
+| Refused segments, every budget spent | Segments 502 from partway on, indefinitely            | The terminal state and the failure notice                                                                |
+| Escape a bad edge                    | One edge 502s; a playlist refetch yields another edge | Sentry: every request to `…ams-static-01` failed while `…-03` served 200s                                |
+| Recover without restarting the film  | Same, with alternate audio renditions declared        | Issue #18: a fifty-minute film restarting from zero                                                      |
+| Keep the chosen audio track          | Same, after the viewer picks a non-default track      | Issue #18: playback resuming in the wrong language                                                       |
+| Hanging edge                         | Connection accepted, never answered                   | The frozen picture with no error to react to                                                             |
+| Manual retry                         | Dead CDN, then healed, then the viewer presses retry  | The retry button on the failure notice                                                                   |
+| Buffer credited on delivery          | A throttled link, checked before the first arrival    | A property the multi-level scenarios rest on                                                             |
+| Keep the audio track across a switch | Healthy; the viewer changes quality to another level  | Audio groups ordered differently per level                                                               |
+| Adapt to a link that cannot keep up  | Healthy, but the link carries only the lower level    | hls.js's own ABR, and the player staying out of its way                                                  |
+| Element wedges mid-playback          | Appends accepted but producing no buffered range      | A capture from the TV: black screen, 0 of 6 attempts, two minutes; one `persistent-wedge` episode report |
 
 ## Reading them after an hls.js upgrade
 
@@ -152,7 +152,8 @@ whatever order the manifest declared them in.
    condition rather than declared by the test.
 3. Assert against `harness.hlsErrors` (what hls.js said), `harness.steps` (what the player did),
    `harness.episodes` (what would have been reported to Sentry) and `harness.player` (the state the
-   UI renders from).
+   UI renders from). A persistent non-fatal wedge should produce one episode after the watchdog's
+   persistence threshold, even when no fatal hls.js error occurs.
 
 Prefer assertions about the shape of the behaviour over exact counts and timings. The exceptions are
 the two tripwires above, where the number is the whole point and is documented as such in the test.
