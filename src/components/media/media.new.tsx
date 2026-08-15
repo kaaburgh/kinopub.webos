@@ -1022,8 +1022,10 @@ function useVideoPlayer({
           lastReason: 'stall / restart',
           lastAt: now,
         };
-        episodeRef.current.noteAction('watchdog-restart', now, { stalledForMs: stalledFor });
-        episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+        if (!wedgeReported || episodeRef.current.isActive()) {
+          episodeRef.current.noteAction('watchdog-restart', now, { stalledForMs: stalledFor });
+          episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+        }
         hls.startLoad(position);
         return;
       }
@@ -1040,8 +1042,10 @@ function useVideoPlayer({
           lastReason: 'stall / reload',
           lastAt: now,
         };
-        episodeRef.current.noteExhausted('stall-watchdog', now, 'stall / reload budget spent');
-        episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+        if (!wedgeReported || episodeRef.current.isActive()) {
+          episodeRef.current.noteExhausted('stall-watchdog', now, 'stall / reload budget spent');
+          episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+        }
         return;
       }
 
@@ -1051,8 +1055,10 @@ function useVideoPlayer({
       actions += 1;
       stalledSince = now;
       restarted = false;
-      episodeRef.current.noteAction('watchdog-reload', now, { reload: reloads, limit: STALL_MAX_RELOADS });
-      episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+      if (!wedgeReported || episodeRef.current.isActive()) {
+        episodeRef.current.noteAction('watchdog-reload', now, { reload: reloads, limit: STALL_MAX_RELOADS });
+        episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+      }
       stallRecoveryRef.current = {
         attempts: actions,
         limit: STALL_MAX_ACTIONS,
