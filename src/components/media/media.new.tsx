@@ -909,6 +909,9 @@ function useVideoPlayer({
     let actions = 0;
     let lastPosition = -1;
     let wedgeSince: number | undefined;
+    // A report closes the tracker, but not the underlying wedge. Do not open a second episode for
+    // the same continuous failure until the element has returned to a healthy state.
+    let wedgeReported = false;
 
     const intervalId = setInterval(() => {
       const video = videoRef.current;
@@ -952,6 +955,7 @@ function useVideoPlayer({
         wedgeSince = wedgeSince === undefined ? now : wedgeSince;
       } else {
         wedgeSince = undefined;
+        wedgeReported = false;
       }
 
       if (wedgeSince !== undefined) {
@@ -960,11 +964,12 @@ function useVideoPlayer({
         // Open the episode at the same persistence boundary that gates the watchdog's first
         // action. This is independent of one-tick currentTime changes: a wedged media element can
         // jitter while its readyState remains below the point where playback is actually possible.
-        if (wedgeFor >= STALL_RESTART_AFTER && !episodeRef.current.isPersistentWedge()) {
+        if (wedgeFor >= STALL_RESTART_AFTER && !wedgeReported && !episodeRef.current.isPersistentWedge()) {
           const latestError = latestHlsErrorRef.current;
 
           episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: wedgeFor, actions, reloads, restarted }));
           episodeRef.current.noteWedge(now, latestError?.reason || 'non-playable media state', latestError?.host);
+          wedgeReported = true;
         }
       }
 
