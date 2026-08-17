@@ -1,5 +1,7 @@
 ## Kinopub compatibility and device evidence
 
+Use a focused branch and a conventional/imperative PR title that the repository labeler can classify, such as `fix: preserve audio selection after recovery` or `docs: reconcile playback evidence`.
+
 For changes where the item applies, record these project-specific gates in addition to the generic PR evidence:
 
 - [ ] Chrome 35/webOS compatibility impact was considered; changes affecting emitted JavaScript, dependencies, bundling, or browser APIs include `yarn build` and `yarn check:es5` validation.

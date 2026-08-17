@@ -85,7 +85,7 @@ HLS_DEBUG=1 yarn test --watchAll=false --testPathPattern=media.scenarios
 
 The shipped browser target is `chrome 35`. Modern TypeScript syntax compiling successfully is not evidence that a modern runtime or DOM API exists on the television; require an existing polyfill or a guarded fallback. Any change that can affect emitted JavaScript, dependencies, bundling, or browser APIs must include `yarn build` and `yarn check:es5` validation.
 
-Treat dependency upgrades—especially hls.js, React, Enact, Create React App, webpack, TypeScript, and webOS tooling—as migrations rather than opportunistic edits. Preserve TV remote-control behaviour and focus. Back-button handling is ordered through the global handler stack, so do not assume DOM-style propagation or that an awaited handler is harmless.
+Treat dependency upgrades—especially hls.js, React, Enact, Create React App, webpack, TypeScript, and webOS tooling—as migrations rather than opportunistic edits. Do not combine them with unrelated feature work. Preserve TV remote-control behaviour and focus. Back-button handling is ordered through the global handler stack, so do not assume DOM-style propagation or that an awaited handler is harmless.
 
 ### Playback and HLS invariants
 
@@ -121,4 +121,4 @@ Do not add a public deployment or a new telemetry destination without an explici
 
 ### Product and documentation discipline
 
-Preserve existing user-facing language unless the task is explicitly about copy or localisation. When observable facts change, update the corresponding source of truth in the same change: `ROADMAP.md` for product state/evidence/sequencing; the diagnostics spec/manual test for observable playback behaviour; the scenario-test guide for harness semantics; and build/CI docs for commands or workflows. Do not rewrite `TECHNICAL_REVIEW.md` as a live backlog; make only narrowly justified historical corrections.
+Make the smallest coherent change that addresses the demonstrated problem and avoid opportunistic rewrites of old React/Enact code. Add regression coverage for a bug fix whenever the failure is representable in tests. Preserve existing user-facing language unless the task is explicitly about copy or localisation. When observable facts change, update the corresponding source of truth in the same change: `ROADMAP.md` for product state/evidence/sequencing; the diagnostics spec/manual test for observable playback behaviour; the scenario-test guide for harness semantics; and build/CI docs for commands or workflows. Do not rewrite `TECHNICAL_REVIEW.md` as a live backlog; make only narrowly justified historical corrections.
