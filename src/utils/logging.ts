@@ -137,6 +137,23 @@ export function scrubUrls<T>(value: T): T {
   return value;
 }
 
+/**
+ * Exact playback positions and absolute buffered ranges are viewing data, not diagnostics we may
+ * send off the television. Strip them at the reporting boundary as well as at the producer so a
+ * future context field cannot accidentally bypass the privacy rule.
+ */
+function scrubPlaybackEpisode(summary: EpisodeSummary) {
+  const context = summary.context ? { ...summary.context } : undefined;
+
+  if (context) {
+    delete context.currentTime;
+    delete context.position;
+    delete context.bufferedRanges;
+  }
+
+  return scrubUrls({ ...summary, context });
+}
+
 function scrubEvent(event: Sentry.Event) {
   return scrubUrls(event);
 }
@@ -284,6 +301,7 @@ export const sentryEpisodeSink: EpisodeSink = {
   report: (summary: EpisodeSummary) => {
     Sentry.withScope((scope) => {
       scope.setTag('playback_episode', summary.outcome);
+      scope.setTag('playback_episode_trigger', summary.trigger);
 
       if (summary.lastReason) {
         scope.setTag('playback_reason', summary.lastReason);
@@ -304,7 +322,7 @@ export const sentryEpisodeSink: EpisodeSink = {
       // outcome and completely different facts.
       scope.setTag('playback_episode_ended_by', summary.endedBy);
 
-      scope.setContext('playback_episode', scrubUrls({ ...summary }));
+      scope.setContext('playback_episode', scrubPlaybackEpisode(summary));
       // Only the player giving up on its own is an error. A viewer who leaves, or retries by hand,
       // ended the episode deliberately -- worth recording, not worth paging over.
       scope.setLevel(

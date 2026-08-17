@@ -247,6 +247,10 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
 
 - Reproduce a stall, then let it run to completion rather than restarting playback.
 - In Sentry, find the `playback: recovered …` or `playback: recovery abandoned …` event.
+- Reproduce a wedge that keeps `readyState` below `HAVE_FUTURE_DATA` while hls.js continues to emit
+  non-fatal errors. Let it persist beyond the watchdog's 8 s threshold, then confirm one event is
+  eventually produced even if no fatal error or recovery action occurs. Its
+  `playback_episode_trigger` must be `persistent-wedge`.
 - Confirm its breadcrumbs show the whole chain in order: the episode start, each fatal error, each
   `fatal-retry` with its attempt number and delay, any `watchdog-restart` / `watchdog-reload`, and
   the budget-exhausted entries.
@@ -256,6 +260,11 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
 - For a recovered episode, confirm the `playback_recovered_after` tag names the action that came
   last — this is what says which recovery path works.
 - Confirm exactly one event is sent per episode, not one per error.
+- Confirm the persistent-wedge event carries `playback_id`, selected quality and HLS level state,
+  ready/network state, seeking, buffer-ahead duration, buffered-range count, the latest HLS error,
+  and recovery/watchdog state. Confirm that exact playback position and absolute buffered ranges are
+  absent because they are personal viewing data, and that appends alone do not close the episode
+  while the media element remains unplayable.
 - Stall a stream, then press Back while recovery is still running. Confirm an event arrives with
   `playback_episode_ended_by: teardown` at `warning` level, carrying the breadcrumbs collected so
   far. Nothing was reported for this case before, so an absent event is the regression.

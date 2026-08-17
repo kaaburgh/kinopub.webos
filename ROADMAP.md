@@ -340,6 +340,27 @@ Ordered by priority, then by what unblocks what.
   arrives in Sentry.
 - **Estimated scope:** Small.
 
+### A22 — Report persistent non-fatal playback wedges
+
+> **Implemented, validation incomplete.** Issue [#37](https://github.com/kaaburgh/kinopub.webos/issues/37)
+> exposed a gap in the episode trigger: a TV can remain non-playable while hls.js continues to emit
+> only non-fatal errors, leaving the `playback_id` on the QR capture with no searchable Sentry event.
+> The watchdog now opens one `persistent-wedge` episode after the existing 8 s persistence threshold.
+> It waits for actual media progress before calling the episode recovered, keeps appends that produce
+> no playable range from faking recovery, and carries the latest safe HLS/media/watchdog context into
+> the existing single report. Unit coverage and the media scenario assertion are in place. The
+> scenario suite still requires the checked-in hls.js 1.6.15 dependency; the local checkout currently
+> has an unrelated user edit to 1.0.10, and LG G5 delivery remains unvalidated.
+
+- **Status:** Completed, validation incomplete
+- **Priority:** High
+- **Category:** Error reporting / playback diagnostics
+- **Origin:** [#37](https://github.com/kaaburgh/kinopub.webos/issues/37), related to [#35](https://github.com/kaaburgh/kinopub.webos/issues/35) and [#36](https://github.com/kaaburgh/kinopub.webos/issues/36)
+- **Evidence:** code — episode trigger, bounded breadcrumbing, context fields, and unit/scenario
+  assertions; runtime — unit tests and typecheck under Node 14; device — not collected.
+- **Follow-up:** Run the persistent-wedge capture on the LG G5 and confirm the event is delivered with
+  the photographed `playback_id`, rather than merely queued during teardown.
+
 ### A3 — Report backend and API failures
 
 > **Implemented, validation incomplete.** `src/api/base.ts` now reports three kinds of failure —

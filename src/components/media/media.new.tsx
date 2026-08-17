@@ -94,6 +94,31 @@ function hostnameOfFragment(data: any) {
   }
 }
 
+type LatestHlsError = {
+  category: string;
+  reason: string;
+  fatal: boolean;
+  host?: string;
+};
+
+function roundPlaybackValue(value: number) {
+  return typeof value === 'number' && isFinite(value) ? Math.round(value * 10) / 10 : undefined;
+}
+
+function getBufferAhead(video: HTMLVideoElement) {
+  for (let index = 0; index < video.buffered.length; index += 1) {
+    try {
+      if (video.buffered.start(index) <= video.currentTime && video.currentTime <= video.buffered.end(index)) {
+        return Math.max(0, video.buffered.end(index) - video.currentTime);
+      }
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  return 0;
+}
+
 export type RecoveryState = {
   attempts: number;
   // The cap that applies to `attempts`, which differs between network and
@@ -203,6 +228,10 @@ function useVideoPlayer({
   // different failure from a starved buffer and needs a different remedy: fresh segment URLs cannot
   // help a pipeline that is refusing the bytes it already has.
   const bufferWedgedRef = useRef(false);
+  // Keep the last safe summary available when the watchdog decides that a non-fatal wedge persisted
+  // long enough to report. The tracker intentionally ignores non-fatal errors before an episode
+  // starts, but the eventual report still needs to say what hls.js was last complaining about.
+  const latestHlsErrorRef = useRef<LatestHlsError | undefined>();
   const currentAudioTrackIndexRef = useRef(0);
   // Decode health is sampled continuously, not only while the diagnostics overlay is open, because
   // the indicator it drives is the whole point: a viewer should not have to open diagnostics to
@@ -416,6 +445,38 @@ function useVideoPlayer({
     [streamingType, currentAudioTrackIndex, currentSourceTrack?.src],
   );
 
+  const getEpisodeContext = useCallback((hls: HLS | null, video: HTMLVideoElement | null, watchdog?: Record<string, unknown>) => {
+    const bufferAhead = video ? getBufferAhead(video) : undefined;
+    const readyState = video?.readyState;
+
+    return {
+      quality: currentSourceTrackRef.current?.name,
+      streamingType: streamingTypeRef.current,
+      levelCount: hls?.levels?.length,
+      currentLevel: hls?.currentLevel,
+      bandwidthEstimate: (hls as any)?.bandwidthEstimate,
+      readyState,
+      networkState: video?.networkState,
+      seeking: video ? Boolean(video.seeking) : undefined,
+      bufferAhead: bufferAhead === undefined ? undefined : roundPlaybackValue(bufferAhead),
+      bufferedRangeCount: video?.buffered.length,
+      playableBuffer:
+        video && bufferAhead !== undefined
+          ? bufferAhead > STALL_MIN_BUFFER_AHEAD && readyState !== undefined && readyState >= MIN_PLAYABLE_READY_STATE
+          : undefined,
+      latestHlsError: latestHlsErrorRef.current,
+      recovery: {
+        fatalAttempts: fatalRecoveryRef.current.attempts,
+        fatalLimit: fatalRecoveryRef.current.limit,
+        fatalExhausted: fatalRecoveryRef.current.exhausted,
+        stallAttempts: stallRecoveryRef.current.attempts,
+        stallLimit: stallRecoveryRef.current.limit,
+        stallExhausted: stallRecoveryRef.current.exhausted,
+      },
+      watchdog,
+    };
+  }, []);
+
   const handleMediaLoaded = useCallback(() => {
     if (videoRef.current) {
       setIsLoaded(true);
@@ -454,6 +515,7 @@ function useVideoPlayer({
       stallRecoveryRef.current = { attempts: 0, limit: STALL_MAX_ACTIONS, exhausted: false };
       fatalRetryPendingRef.current = false;
       bufferWedgedRef.current = false;
+      latestHlsErrorRef.current = undefined;
       decodeSamplesRef.current = [];
       decodeErrorTimesRef.current = [];
       decodeHealthRef.current = EMPTY_DECODE_HEALTH;
@@ -488,7 +550,10 @@ function useVideoPlayer({
           // just told us the append produced no progress, treating the event as proof of recovery
           // would refill the retry budget on the strength of the very thing that is failing, and
           // the escalation would never finish. Only real progress clears the flag, below.
-          if (bufferWedgedRef.current || !provesStreamRecovered(data?.frag, recoveringStream)) {
+          // A persistent wedge is only resolved by actual media-element progress. hls.js can emit
+          // FRAG_BUFFERED while append notifications continue but the TV still has no playable
+          // range, which is precisely the blind spot this episode trigger records.
+          if (bufferWedgedRef.current || episodeRef.current.isPersistentWedge() || !provesStreamRecovered(data?.frag, recoveringStream)) {
             return;
           }
 
@@ -514,24 +579,23 @@ function useVideoPlayer({
           // surfaces a decoder that is quietly rejecting data.
           const category = getFailureCategory(data);
 
+          const now = Date.now();
+          const reason = [data?.type, data?.details].filter(Boolean).join(' / ');
+          const errorHost = hostnameOfFragment(data);
+
+          latestHlsErrorRef.current = {
+            category,
+            reason,
+            fatal: Boolean(data?.fatal),
+            host: errorHost,
+          };
+
           if (category === 'media') {
             decodeErrorTimesRef.current = pruneTimestamps([...decodeErrorTimesRef.current, Date.now()], Date.now());
           }
 
-          episodeRef.current.setContext({
-            quality: currentSourceTrackRef.current?.name,
-            streamingType: streamingTypeRef.current,
-            levelCount: hls.levels?.length,
-            currentLevel: hls.currentLevel,
-            bandwidthEstimate: (hls as any).bandwidthEstimate,
-          });
-          episodeRef.current.noteError(
-            category,
-            Date.now(),
-            Boolean(data?.fatal),
-            [data?.type, data?.details].filter(Boolean).join(' / '),
-            hostnameOfFragment(data),
-          );
+          episodeRef.current.setContext(getEpisodeContext(hls, videoRef.current));
+          episodeRef.current.noteError(category, now, Boolean(data?.fatal), reason, errorHost);
 
           // `bufferAppendNoProgress` is the one non-fatal error worth acting on. Everything else
           // hls.js retries internally, and interfering there fights its own recovery -- but this one
@@ -548,7 +612,6 @@ function useVideoPlayer({
             return;
           }
 
-          const reason = [data.type, data.details].filter(Boolean).join(' / ');
           // Remembered so only this stream's own recovery clears the budget.
           recoveringStream = data?.frag?.type || undefined;
 
@@ -806,7 +869,7 @@ function useVideoPlayer({
         hlsRef.current = null;
       }
     };
-  }, [currentSrc, isHLSJSActive, handleMediaLoaded, reloadNonce]);
+  }, [currentSrc, isHLSJSActive, handleMediaLoaded, getEpisodeContext, reloadNonce]);
 
   /**
    * Reports a recovery episode that was still in flight when the player went away.
@@ -845,20 +908,10 @@ function useVideoPlayer({
     // the overlay never reads `idle` while the watchdog is working.
     let actions = 0;
     let lastPosition = -1;
-
-    const getBufferAhead = (video: HTMLVideoElement) => {
-      for (let index = 0; index < video.buffered.length; index += 1) {
-        try {
-          if (video.buffered.start(index) <= video.currentTime && video.currentTime <= video.buffered.end(index)) {
-            return video.buffered.end(index) - video.currentTime;
-          }
-        } catch (e) {
-          return 0;
-        }
-      }
-
-      return 0;
-    };
+    let wedgeSince: number | undefined;
+    // A report closes the tracker, but not the underlying wedge. Do not open a second episode for
+    // the same continuous failure until the element has returned to a healthy state.
+    let wedgeReported = false;
 
     const intervalId = setInterval(() => {
       const video = videoRef.current;
@@ -876,6 +929,7 @@ function useVideoPlayer({
       // pre-retry position afterwards would read as movement that never happened.
       if (fatalRetryPendingRef.current) {
         lastPosition = video.currentTime;
+        wedgeSince = undefined;
         return;
       }
 
@@ -892,8 +946,39 @@ function useVideoPlayer({
       // to mean "I have something to play from here"; below it, buffered ranges are bytes the
       // decoder has not accepted.
       const hasPlayableBuffer = getBufferAhead(video) > STALL_MIN_BUFFER_AHEAD && video.readyState >= MIN_PLAYABLE_READY_STATE;
+      const meaningfullyAdvancing = advancing && video.readyState >= MIN_PLAYABLE_READY_STATE && hasPlayableBuffer;
+      const hasWedgeEvidence = video.currentTime > 0 || video.buffered.length > 0 || latestHlsErrorRef.current !== undefined;
+      const nonPlayable = !video.paused && !video.ended && !meaningfullyAdvancing && !hasPlayableBuffer && hasWedgeEvidence;
+      const now = Date.now();
 
-      if (video.paused || video.ended || advancing || hasPlayableBuffer) {
+      if (nonPlayable) {
+        wedgeSince = wedgeSince === undefined ? now : wedgeSince;
+      } else {
+        wedgeSince = undefined;
+        wedgeReported = false;
+      }
+
+      if (wedgeSince !== undefined) {
+        const wedgeFor = now - wedgeSince;
+
+        // Open the episode at the same persistence boundary that gates the watchdog's first
+        // action. This is independent of one-tick currentTime changes: a wedged media element can
+        // jitter while its readyState remains below the point where playback is actually possible.
+        if (wedgeFor >= STALL_RESTART_AFTER && !wedgeReported && !episodeRef.current.isPersistentWedge()) {
+          const latestError = latestHlsErrorRef.current;
+
+          episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: wedgeFor, actions, reloads, restarted }));
+          episodeRef.current.noteWedge(now, latestError?.reason || 'non-playable media state', latestError?.host);
+          wedgeReported = true;
+        }
+      }
+
+      if (meaningfullyAdvancing && episodeRef.current.isPersistentWedge()) {
+        episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: 0, actions, reloads, restarted }));
+        episodeRef.current.notePlaybackProgress(Date.now());
+      }
+
+      if (video.paused || video.ended || meaningfullyAdvancing || hasPlayableBuffer) {
         stalledSince = undefined;
         restarted = false;
 
@@ -910,8 +995,6 @@ function useVideoPlayer({
 
         return;
       }
-
-      const now = Date.now();
 
       if (!stalledSince) {
         stalledSince = now;
@@ -939,7 +1022,10 @@ function useVideoPlayer({
           lastReason: 'stall / restart',
           lastAt: now,
         };
-        episodeRef.current.noteAction('watchdog-restart', now, { stalledForMs: stalledFor, position: Math.round(position) });
+        if (!wedgeReported || episodeRef.current.isActive()) {
+          episodeRef.current.noteAction('watchdog-restart', now, { stalledForMs: stalledFor });
+          episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+        }
         hls.startLoad(position);
         return;
       }
@@ -949,7 +1035,6 @@ function useVideoPlayer({
       }
 
       if (reloads >= STALL_MAX_RELOADS) {
-        episodeRef.current.noteExhausted('stall-watchdog', Date.now(), 'stall / reload budget spent');
         stallRecoveryRef.current = {
           attempts: actions,
           limit: STALL_MAX_ACTIONS,
@@ -957,6 +1042,10 @@ function useVideoPlayer({
           lastReason: 'stall / reload',
           lastAt: now,
         };
+        if (!wedgeReported || episodeRef.current.isActive()) {
+          episodeRef.current.noteExhausted('stall-watchdog', now, 'stall / reload budget spent');
+          episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+        }
         return;
       }
 
@@ -966,7 +1055,10 @@ function useVideoPlayer({
       actions += 1;
       stalledSince = now;
       restarted = false;
-      episodeRef.current.noteAction('watchdog-reload', now, { reload: reloads, limit: STALL_MAX_RELOADS, position: Math.round(position) });
+      if (!wedgeReported || episodeRef.current.isActive()) {
+        episodeRef.current.noteAction('watchdog-reload', now, { reload: reloads, limit: STALL_MAX_RELOADS });
+        episodeRef.current.setContext(getEpisodeContext(hls, video, { stalledForMs: stalledFor, actions, reloads, restarted }));
+      }
       stallRecoveryRef.current = {
         attempts: actions,
         limit: STALL_MAX_ACTIONS,
@@ -999,7 +1091,7 @@ function useVideoPlayer({
     // from minutes ago. The first tick after a manual retry would then see a huge stall against an
     // exhausted budget and declare the fresh attempt dead within seconds, before it had finished
     // loading its manifest. Re-running the effect is what gives the retry a clean watchdog.
-  }, [currentSrc, reloadNonce]);
+  }, [currentSrc, getEpisodeContext, reloadNonce]);
 
   // Decode-health sampling. Reads the element's cumulative playback-quality counters on a timer;
   // `evaluateDecodeHealth` turns consecutive readings into a sliding-window dropped-frame ratio.

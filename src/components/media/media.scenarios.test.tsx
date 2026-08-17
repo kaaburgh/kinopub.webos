@@ -413,6 +413,29 @@ describe('playback scenarios', () => {
     expect(actions(harness)).toEqual(expect.arrayContaining(['watchdog-restart', 'watchdog-reload']));
     expect(harness.player.failure).toMatchObject({ kind: 'recovery-exhausted' });
     expect(harness.player.recovery.attempts).toBeLessThanOrEqual(harness.player.recovery.limit);
+    expect(harness.episodes).toHaveLength(1);
+    expect(harness.episodes[0]).toMatchObject({
+      trigger: 'persistent-wedge',
+      outcome: 'abandoned',
+      fatalCount: 0,
+      context: {
+        readyState: 1,
+        networkState: expect.any(Number),
+        seeking: expect.any(Boolean),
+        bufferAhead: expect.any(Number),
+        bufferedRangeCount: expect.any(Number),
+        playableBuffer: false,
+        latestHlsError: {
+          category: 'buffer',
+          reason: 'mediaError / bufferStalledError',
+          fatal: false,
+        },
+        recovery: expect.objectContaining({ stallExhausted: true }),
+        watchdog: expect.objectContaining({ actions: expect.any(Number) }),
+      },
+    });
+    expect(harness.episodes[0].context).not.toHaveProperty('currentTime');
+    expect(harness.episodes[0].context).not.toHaveProperty('bufferedRanges');
 
     harness.destroy();
   });

@@ -122,6 +122,67 @@ describe('createPlaybackEpisodeTracker', () => {
     expect(reports).toHaveLength(0);
   });
 
+  it('reports one persistent non-fatal wedge and keeps the recovery outcome', () => {
+    const { crumbs, reports, tracker } = setup();
+
+    // Non-fatal errors before the persistence threshold are deliberately not an episode yet.
+    tracker.noteError('buffer', T0, false, 'mediaError / bufferStalledError', 'edge.example.net');
+    tracker.noteWedge(T0 + 8000, 'mediaError / bufferStalledError', 'edge.example.net');
+
+    for (let index = 1; index <= 100; index += 1) {
+      tracker.noteError('buffer', T0 + 8000 + index * 100, false, 'mediaError / bufferStalledError', 'edge.example.net');
+      tracker.noteWedge(T0 + 8000 + index * 100, 'mediaError / bufferStalledError', 'edge.example.net');
+    }
+
+    expect(reports).toHaveLength(0);
+    expect(crumbs.filter((crumb) => crumb.message === 'persistent playback wedge observed')).toHaveLength(1);
+
+    // A real media-progress signal closes the same episode; it must not create a second standalone
+    // event beside the eventual recovery report.
+    tracker.notePlaybackProgress(T0 + 20000);
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({
+      trigger: 'persistent-wedge',
+      outcome: 'recovered',
+      endedBy: 'progress',
+      fatalCount: 0,
+      recoveredAfter: 'persistent-wedge',
+      host: 'edge.example.net',
+    });
+    expect(reports[0].errorCounts).toEqual({ buffer: 100 });
+  });
+
+  it('reports a non-fatal wedge on teardown without duplicating a later fatal path', () => {
+    const { reports, tracker } = setup();
+
+    tracker.noteWedge(T0 + 8000, 'mediaError / bufferStalledError');
+    tracker.reset(T0 + 9000, 'teardown');
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ trigger: 'persistent-wedge', fatalCount: 0, endedBy: 'teardown' });
+
+    // A new fatal episode after teardown is independent and is still reported normally.
+    tracker.noteError('network', T0 + 10000, true, 'networkError / fragLoadError');
+    tracker.noteAction('fatal-retry', T0 + 11000);
+    tracker.noteProgress(T0 + 12000);
+
+    expect(reports).toHaveLength(2);
+    expect(reports[1]).toMatchObject({ trigger: 'fatal-error', fatalCount: 1, endedBy: 'progress' });
+  });
+
+  it('keeps a persistent wedge and a later fatal error in one episode', () => {
+    const { reports, tracker } = setup();
+
+    tracker.noteWedge(T0 + 8000, 'mediaError / bufferStalledError');
+    tracker.noteError('network', T0 + 9000, true, 'networkError / fragLoadError');
+    tracker.noteAction('fatal-retry', T0 + 10000);
+    tracker.noteProgress(T0 + 12000);
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ trigger: 'persistent-wedge', fatalCount: 1, actions: ['fatal-retry'] });
+  });
+
   it('reports a watchdog-only episode once its budget runs out', () => {
     const { reports, tracker } = setup();
 
