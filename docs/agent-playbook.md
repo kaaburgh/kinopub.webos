@@ -91,9 +91,11 @@ Playback test infrastructure:
 
 Establish current roadmap/code facts before proposing a change. For a TV capture or Sentry event, record observations before interpretation: error type/detail, HTTP status, buffer state, ready state, selected/current level, timestamps, and user action. A bandwidth estimate or codec name alone is not a root cause.
 
-Reproduce at the lowest honest boundary: pure unit test for a pure rule; playback scenario when behaviour depends on player + hls.js + network. Stage network failures at the loader/CDN seam rather than mocking hls.js events. The scenario harness cannot establish decoder, HDR, compositor, focus, installation, or real TV-network behaviour; preserve those as device checks.
+Reproduce at the lowest honest boundary: pure unit test for a pure rule; playback scenario when behaviour depends on player + hls.js + network. Stage network failures at the loader/CDN seam rather than mocking hls.js events. The scenario harness cannot establish decoder, HDR, compositor, focus, installation, or real TV-network behaviour; for those, add or update a manual test plan and keep the roadmap item at validation incomplete or blocked on device evidence as appropriate.
 
-Validate in layers. TypeScript/React changes normally require lint, format, typecheck, and focused tests. Playback logic adds scenarios. Documentation adds docs-link validation. Dependencies/output syntax/browser APIs/build configuration add build and ES5 checks. Packaging changes add `yarn package` and verification of the unsuffixed `out/kinopub.webos_v<version>.ipk`.
+Make one causal change. Keep the implementation tied to the reproduced or otherwise demonstrated failure. Avoid combining cleanup, dependency upgrades, broad typing changes, and behavioural changes unless they are inseparable.
+
+Validate in layers. TypeScript/React changes normally require lint, format, typecheck, and focused tests. Playback logic adds scenarios. Documentation adds docs-link validation. Dependencies/output syntax/browser APIs/build configuration add build and ES5 checks. Packaging changes add `yarn package` and verification of the unsuffixed `out/kinopub.webos_v<version>.ipk`. Do not run expensive unrelated checks merely to make the checklist longer, but never omit a compatibility check that can catch a Chrome 35 black-screen regression.
 
 ### Playback review checklist
 
