@@ -1,0 +1,15 @@
+kit_version = 1
+profiles = ["core"]
+
+[project]
+name = "kinopub.webos"
+kind = "LG webOS media application / playback diagnostics"
+roadmap = "ROADMAP.md"
+
+[workflow]
+cloud_first = true
+
+[local]
+policy_files = ["docs/agent-policy.local.md"]
+playbook_files = ["docs/agent-playbook.local.md"]
+pr_files = ["docs/pr-policy.local.md"]
