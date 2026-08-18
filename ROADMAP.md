@@ -267,6 +267,7 @@ Ordered by priority, then by what unblocks what.
 > now covers and nobody has run.
 
 - **Status:** Completed, validation incomplete
+- **Depends on:** None
 - **Priority:** High
 - **Category:** Playback UX
 - **Origin:** Review §4.1; the unbuilt half of item 4's recovery work
@@ -313,6 +314,7 @@ Ordered by priority, then by what unblocks what.
 > entirely (`window.close()` from `views.tsx:20`) rather than returning to the item screen.
 
 - **Status:** Completed, validation incomplete
+- **Depends on:** None
 - **Priority:** High
 - **Category:** Error reporting
 - **Origin:** Review §4.2, §5
@@ -353,6 +355,7 @@ Ordered by priority, then by what unblocks what.
 > has an unrelated user edit to 1.0.10, and LG G5 delivery remains unvalidated.
 
 - **Status:** Completed, validation incomplete
+- **Depends on:** None
 - **Priority:** High
 - **Category:** Error reporting / playback diagnostics
 - **Origin:** [#37](https://github.com/kaaburgh/kinopub.webos/issues/37), related to [#35](https://github.com/kaaburgh/kinopub.webos/issues/35) and [#36](https://github.com/kaaburgh/kinopub.webos/issues/36)
@@ -378,6 +381,7 @@ Ordered by priority, then by what unblocks what.
 > was gone.
 
 - **Status:** Completed, validation incomplete
+- **Depends on:** None
 - **Priority:** High
 - **Category:** Error reporting / observability
 - **Origin:** Review §4.10
@@ -436,6 +440,7 @@ Ordered by priority, then by what unblocks what.
 > (**A19**).
 
 - **Status:** Completed
+- **Depends on:** None
 - **Priority:** High
 - **Category:** Privacy / configuration
 - **Origin:** Review §4.9, §4.13
@@ -476,6 +481,7 @@ Ordered by priority, then by what unblocks what.
 ### A5 — Validate the decode-health thresholds on the LG G5
 
 - **Status:** Investigation first — blocked on device evidence
+- **Depends on:** None
 - **Priority:** High
 - **Category:** Diagnostics correctness
 - **Origin:** Review §5; narrowed scope of item 4
@@ -504,6 +510,7 @@ Ordered by priority, then by what unblocks what.
 ### A6 — Answer whether the stall watchdog rescues playback
 
 - **Status:** Investigation first — blocked on device evidence
+- **Depends on:** A2
 - **Priority:** Medium
 - **Category:** Playback recovery
 - **Origin:** Review §7.2; the unanswered half of item 1
@@ -575,6 +582,7 @@ Ordered by priority, then by what unblocks what.
 ### A7 — Stop the watchdog's playlist reload from flushing the buffer
 
 - **Status:** Dropped — the premise was wrong
+- **Depends on:** None
 - **Priority:** —
 - **Category:** Playback recovery
 - **Origin:** Review §4.3, which is corrected in `TECHNICAL_REVIEW.md`
@@ -604,6 +612,7 @@ which now records it.
 ### A8 — Make the QR capture carry everything the overlay shows
 
 - **Status:** Open
+- **Depends on:** None
 - **Priority:** Medium
 - **Category:** Diagnostics correctness
 - **Origin:** Review §5, §4.6; follow-up to item 2
@@ -639,6 +648,7 @@ which now records it.
 ### A9 — Bound API requests, and stop Back from waiting on one
 
 - **Status:** Open
+- **Depends on:** None
 - **Priority:** Medium
 - **Category:** Robustness / UX
 - **Origin:** Review §4.11
@@ -675,6 +685,7 @@ which now records it.
 ### A10 — Add a render error boundary
 
 - **Status:** Open
+- **Depends on:** None
 - **Priority:** Medium
 - **Category:** Robustness
 - **Origin:** Review §4.12
@@ -701,6 +712,7 @@ which now records it.
 ### A11 — Measure the cost of always-on diagnostics collection
 
 - **Status:** Investigation first
+- **Depends on:** None
 - **Priority:** Medium
 - **Category:** Performance
 - **Origin:** Review §4.7; follow-up to item 2
@@ -731,6 +743,7 @@ which now records it.
 ### A18 — A web build for reproducing playback problems, with scripted scenarios
 
 - **Status:** Partially implemented — the scripted scenarios exist; the browser build does not
+- **Depends on:** None
 - **Priority:** Medium
 - **Category:** Test infrastructure
 - **Origin:** Requested after **A4** removed the public deployment; enables **A5**, **A6**, **A11**
@@ -802,6 +815,7 @@ which now records it.
 ### A20 — Media recovery is a blunt instrument for the errors it is used on
 
 - **Status:** Partially implemented — investigation continues
+- **Depends on:** A5, A6
 - **Priority:** Medium
 - **Category:** Playback recovery
 - **Origin:** [#18](https://github.com/kaaburgh/kinopub.webos/issues/18), while fixing what it
@@ -892,6 +906,7 @@ which now records it.
 ### A19 — Move the Sentry DSN out of the source and rotate it
 
 - **Status:** Open
+- **Depends on:** None
 - **Priority:** Low
 - **Category:** Configuration / privacy
 - **Origin:** **A4**, deferred deliberately by the repository owner
@@ -950,6 +965,7 @@ which now records it.
 > out right, but the `HDR` badge would stay silent where it should be.
 
 - **Status:** Implemented — validation on device outstanding
+- **Depends on:** None
 - **Priority:** Medium
 - **Category:** Subtitles / HDR
 - **Origin:** Item 5's unperformed reproduction steps; review §4.8
@@ -980,6 +996,7 @@ which now records it.
 ### A13 — Quality-selection follow-ups: decode-driven reduction, and ABR levels as fixed choices
 
 - **Status:** Open — blocked on **A5**
+- **Depends on:** A5
 - **Priority:** Low
 - **Category:** Playback quality
 - **Origin:** The live remainders of items 3 and 4, consolidated
@@ -1011,6 +1028,7 @@ which now records it.
 ### A14 — Walk the build-and-install document end to end on a TV
 
 - **Status:** Open — blocked on device evidence
+- **Depends on:** None
 - **Priority:** Low
 - **Category:** Build / release
 - **Origin:** Item 6's unvalidated half; review §6, §4.16
@@ -1036,6 +1054,7 @@ which now records it.
 ### A15 — Truth up the specification documents
 
 - **Status:** Open
+- **Depends on:** A4
 - **Priority:** Low
 - **Category:** Documentation
 - **Origin:** Review §4.15
@@ -1064,6 +1083,7 @@ which now records it.
 ### A16 — Retire dead code and small inherited defects
 
 - **Status:** Open
+- **Depends on:** None
 - **Priority:** Low
 - **Category:** Maintenance
 - **Origin:** Review §4.14, §4.4
@@ -1103,6 +1123,7 @@ which now records it.
 ### A17 — Find out whether upstream has moved, and whether older webOS still works
 
 - **Status:** Investigation first
+- **Depends on:** None
 - **Priority:** Low
 - **Category:** Compatibility
 - **Origin:** Review §3, §7.5, §7.6
