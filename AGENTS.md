@@ -3,7 +3,7 @@
 
 Project: **kinopub.webos** (`LG webOS media application / playback diagnostics`)
 
-Profiles compiled into this contract: core.
+Profiles compiled into this contract: core, unattended-agent-cycle.
 
 Read this file before planning or changing the repository. The live roadmap is [`ROADMAP.md`](./ROADMAP.md). For operational details read [`docs/agent-playbook.md`](./docs/agent-playbook.md); for roadmap changes read [`docs/roadmap-authoring.md`](./docs/roadmap-authoring.md).
 
@@ -52,6 +52,10 @@ When a required capability is missing:
 - preserve reusable acquisition/bootstrap knowledge when the blocker is resolved, and record important negative acquisition results when they would otherwise be rediscovered.
 
 Failure to acquire a tool inside one sandbox is not, by itself, sufficient evidence to classify work `LOCAL ONLY`, mark the underlying capability unavailable, or close the task as impossible.
+
+## Unattended agent cycles
+
+When `unattended-agent-cycle` is selected, every unattended scheduled run must read and follow [`docs/agent-cycle-run.md`](./docs/agent-cycle-run.md) before selecting work, writing commits, requesting review, or reporting a verdict. Treat the committed cycle contract as immutable for the duration of that run; changes to the contract are ordinary roadmap work reviewed in a separate cycle.
 
 ## Kinopub webOS project policy
 
