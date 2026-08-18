@@ -1,5 +1,5 @@
 kit_version = 1
-profiles = ["core"]
+profiles = ["core", "unattended-agent-cycle"]
 
 [project]
 name = "kinopub.webos"
