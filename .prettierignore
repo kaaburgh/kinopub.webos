@@ -13,4 +13,5 @@ CLAUDE.md
 .github/pull_request_template.md
 .github/workflows/agentic-repo-check.yml
 docs/agent-playbook.md
+docs/agent-cycle-run.md
 docs/roadmap-authoring.md
