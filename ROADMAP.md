@@ -507,6 +507,62 @@ Ordered by priority, then by what unblocks what.
   measurement that says so".
 - **Estimated scope:** Small — one viewing session.
 
+### A21 — Establish the newest known-good hls.js baseline on the LG G5
+
+- **Status:** Investigation first — restore the known-good baseline, then search for the newest safe release
+- **Depends on:** None
+- **Priority:** Medium
+- **Category:** Playback compatibility
+- **Origin:** hls.js upgrade PRs #26–#30 and the LG G5 regression observed after #28
+- **Problem or opportunity:** `master` currently pins `hls.js@1.7.0-rc.2`, but a real title that plays
+  on commit `c07b9c3` immediately before that upgrade wedges on the upgraded build. The scenario
+  suite passes on 1.7.0-rc.2 because it exercises HLS/network/recovery logic, not the television's
+  decoder and real MSE implementation. Keeping a version with a confirmed device regression as the
+  development baseline risks building more recovery logic around a library compatibility problem.
+- **Concrete evidence:** PR #28 upgraded from 1.0.10 to 1.7.0-rc.2 and ran the scenario suite against
+  both versions successfully. PR #30 then captured the device-only regression: playback stopped at
+  0.2 s with `readyState=1` and `bufferAppendNoProgress`, while the same title played on the commit
+  immediately before the upgrade. PR #27's 1.5.20 experiment also exposed a separate comparison
+  hazard: newer package entry points can resolve to the ESM build with different transmuxer-worker
+  behaviour, so a version test is only meaningful if the actual browser bundle/runtime path is held
+  constant and recorded.
+- **Motivation and expected benefit:** Put day-to-day development back on a version that is known to
+  work on the target television, while still finding the newest safe hls.js rather than freezing the
+  dependency forever. This gives future playback changes a trustworthy baseline and turns the
+  upgrade from a one-shot leap into a falsifiable compatibility experiment.
+- **Proposed direction:** Separate operational safety from the investigation. First, revert the
+  working baseline to `hls.js@1.0.10` in a dedicated change without reverting any application fixes,
+  diagnostics, scenario tests, or recovery work added since the upgrade. Keep the cross-version
+  scenario suite green. Then test the newest stable hls.js candidate available at investigation time
+  and sample older stable checkpoints as needed to understand compatibility. Treat every candidate as
+  an independent device result: a bad midpoint does not rule out a later release that may have fixed
+  the regression, so continue testing later releases instead of narrowing a single monotonic
+  first-bad/newest-good boundary. For each candidate, verify the actual bundled hls.js entry point and
+  worker behaviour before comparing results. Use the same LG G5 matrix every time: the known-regressing
+  title from cold start; a normal HLS title; seek into an unbuffered region; Auto and fixed-quality
+  switching; alternate audio selection; and an HDR title. Do not promote a candidate from
+  browser/scenario evidence alone.
+- **Dependencies and sequencing:** The rollback should precede unrelated playback-behaviour changes
+  so those changes are evaluated against a known-good library baseline. The version search can then
+  run independently, but conclusions in **A6** and **A20** must record which hls.js baseline produced
+  the evidence. **A18** remains useful as a fast pre-device filter, not as the acceptance gate.
+- **Compatibility risks:** High if treated as a mechanical dependency bump. hls.js changed loader
+  deadlines, retry ownership, package entry points and worker behaviour across the range already
+  tested. A candidate can pass every repository test and still fail on webOS MSE/decoder behaviour;
+  conversely, a scenario difference may be an intentional upstream policy change rather than a
+  regression. Keep version-only changes isolated from player-policy changes.
+- **Confidence:** device — high that 1.7.0-rc.2 introduced a regression for the observed title;
+  runtime — high that 1.0.10 and 1.7.0-rc.2 differ in error/retry behaviour; unknown which releases
+  above 1.0.10 are safe on the target device.
+- **Validation and acceptance criteria:** The operational rollback leaves the complete repository
+  test/scenario suite green and restores the known-regressing title on the LG G5. The investigation
+  ends with a recorded newest-known-good hls.js version that passes the same suite plus the complete
+  device matrix above, with the bundled entry point/worker mode recorded. A failed candidate does not
+  terminate testing of later releases. If no tested candidate above 1.0.10 passes, keep 1.0.10 pinned
+  and record the tested candidates and their results rather than weakening the device gate.
+- **Estimated scope:** Small for the rollback; medium for the version search because device passes,
+  not code volume, are the limiting factor.
+
 ### A6 — Answer whether the stall watchdog rescues playback
 
 - **Status:** Investigation first — blocked on device evidence
