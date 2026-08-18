@@ -26,9 +26,7 @@ describe('diagnostics export format', () => {
       audio: { level: '1', height: undefined, bytes: '1200', loadSeconds: '0.25', ageSeconds: '1.5' },
     });
     expect(report.decode).toEqual({ totalFrames: 2400, droppedFrames: 48, severity: 'warning' });
-    expect(report.events).toEqual([
-      { timestamp: 900, source: 'hls', name: 'SOURCE_CHANGED', details: '720p -> 1080p' },
-    ]);
+    expect(report.events).toEqual([{ timestamp: 900, source: 'hls', name: 'SOURCE_CHANGED', details: '720p -> 1080p' }]);
 
     const formatted = formatReport(report);
 
