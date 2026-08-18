@@ -1,5 +1,8 @@
 const { buildCompactText, FORMAT_VERSION } = require('./diagnosticsExport');
-const { formatReport, parseCompactText } = require('../../../scripts/decode-diagnostics');
+// Keep this dynamic: TypeScript checks JS tests under `src`, and a literal require would pull the
+// Node-only reference decoder outside tsconfig's `rootDir` into the application program.
+const decoderPath = ['..', '..', '..', 'scripts', 'decode-diagnostics'].join('/');
+const { formatReport, parseCompactText } = require(decoderPath);
 
 describe('diagnostics export format', () => {
   it('round-trips per-stream fragments, decode severity, and source-change markers in v2', () => {
