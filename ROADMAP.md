@@ -906,6 +906,7 @@ which now records it.
 ### A21 — Establish the newest known-good hls.js baseline on the LG G5
 
 - **Status:** Investigation first — restore the known-good baseline, then narrow the upgrade boundary
+- **Depends on:** None
 - **Priority:** Medium
 - **Category:** Playback compatibility
 - **Origin:** hls.js upgrade PRs #26–#30 and the LG G5 regression observed after #28
