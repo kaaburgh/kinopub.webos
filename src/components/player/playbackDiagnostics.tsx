@@ -728,11 +728,25 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
 
     const previous = previousHlsSource.current;
 
-    if (previous && previous.hls !== target.hls) {
-      pushHistory('hls', 'SOURCE_CHANGED', `${previous.quality || 'unknown'} -> ${target.selectedQuality || 'unknown'}`);
+    if (!previous) {
+      previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
+
+      return;
     }
 
-    previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
+    if (previous.hls !== target.hls) {
+      pushHistory('hls', 'SOURCE_CHANGED', `${previous.quality || 'unknown'} -> ${target.selectedQuality || 'unknown'}`);
+      previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
+
+      return;
+    }
+
+    // The HLS object can become visible one polling tick before the player exposes its quality
+    // label. Fill that initial blank, but do not overwrite an established label before a replacement
+    // arrives — otherwise a transition can be misreported as `1080p -> 1080p`.
+    if (!previous.quality && target.selectedQuality) {
+      previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
+    }
   }, [target.hls, target.selectedQuality, pushHistory]);
 
   useEffect(() => {
@@ -1004,7 +1018,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
         lastAgeSeconds: lastFailure ? (capturedAt - lastFailure.timestamp) / 1000 : undefined,
       },
       decode:
-        quality || media?.decodeHealth.severity !== 'ok'
+        quality || (media !== undefined && media.decodeHealth.severity !== 'ok')
           ? {
               totalFrames: quality?.totalVideoFrames,
               droppedFrames: quality?.droppedVideoFrames,
