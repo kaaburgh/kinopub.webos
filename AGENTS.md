@@ -57,9 +57,9 @@ Failure to acquire a tool inside one sandbox is not, by itself, sufficient evide
 
 ### Project sources and environment
 
-Treat [`ROADMAP.md`](./ROADMAP.md) as the live product status and sequencing document. [`TECHNICAL_REVIEW.md`](./TECHNICAL_REVIEW.md) is a historical review snapshot: do not implement a finding from it merely because it exists there; reconcile it with the current roadmap and code first.
+Treat [`ROADMAP.md`](https://github.com/kaaburgh/kinopub.webos/blob/master/ROADMAP.md) as the live product status and sequencing document. [`TECHNICAL_REVIEW.md`](https://github.com/kaaburgh/kinopub.webos/blob/master/TECHNICAL_REVIEW.md) is a historical review snapshot: do not implement a finding from it merely because it exists there; reconcile it with the current roadmap and code first.
 
-Use Node.js 14 from [`.nvmrc`](./.nvmrc) and Yarn Classic 1.x. Install dependencies with `yarn install --frozen-lockfile`. Do not hide the webpack/OpenSSL incompatibility behind an untracked runtime flag, and never commit `node_modules/`, `build/`, or `out/`.
+Use Node.js 14 from [`.nvmrc`](https://github.com/kaaburgh/kinopub.webos/blob/master/.nvmrc) and Yarn Classic 1.x. Install dependencies with `yarn install --frozen-lockfile`. Do not hide the webpack/OpenSSL incompatibility behind an untracked runtime flag, and never commit `node_modules/`, `build/`, or `out/`.
 
 Common repository checks are:
 
