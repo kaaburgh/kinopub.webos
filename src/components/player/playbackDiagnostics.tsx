@@ -669,6 +669,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
   const [encodeError, setEncodeError] = useState<Nullable<string>>(null);
   const nextHistoryId = useRef(1);
   const pendingAppendStarts = useRef<Map<string, number>>(new Map());
+  const previousHlsSource = useRef<Nullable<{ hls: HLS; quality: Nullable<string> }>>(null);
 
   const pushHistory = useCallback((source: DiagnosticHistoryItem['source'], name: string, details?: string) => {
     setHistory((items) => [
@@ -716,6 +717,23 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
       clearInterval(intervalId);
     };
   }, [readMediaRef]);
+
+  // Lifecycle counters intentionally reset for each HLS instance, while history intentionally does
+  // not: the transition is often the evidence needed to explain a quality switch or recovery. Mark
+  // that seam explicitly so a decoded capture cannot make events from two sources look continuous.
+  useEffect(() => {
+    if (!target.hls) {
+      return;
+    }
+
+    const previous = previousHlsSource.current;
+
+    if (previous && previous.hls !== target.hls) {
+      pushHistory('hls', 'SOURCE_CHANGED', `${previous.quality || 'unknown'} -> ${target.selectedQuality || 'unknown'}`);
+    }
+
+    previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
+  }, [target.hls, target.selectedQuality, pushHistory]);
 
   useEffect(() => {
     if (!target.video) {
@@ -906,11 +924,28 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
     // Snapshot everything once, at the moment the user asks for it. Re-encoding on every state tick
     // would change the QR while it is being scanned.
     const capturedAt = Date.now();
+    const media = readMediaRef();
     const video = target.video;
     const ranges = video ? getBufferedRanges(video) : [];
     const matchingRange = video ? getMatchingRange(ranges, video.currentTime) : undefined;
     const quality = video ? getPlaybackQuality(video) : undefined;
     const hlsState = getHlsSnapshot(target.hls);
+    const exportedLastFragments = Object.keys(lastFragments).reduce<NonNullable<ExportCapture['lastFragments']>>(
+      (fragments, streamType) => {
+        const fragment = lastFragments[streamType];
+
+        fragments[streamType] = {
+          level: fragment.level,
+          height: fragment.height,
+          bytes: fragment.bytes,
+          loadSeconds: fragment.loadSeconds,
+          ageSeconds: (capturedAt - fragment.timestamp) / 1000,
+        };
+
+        return fragments;
+      },
+      {},
+    );
 
     const capture: ExportCapture = {
       capturedAt,
@@ -957,15 +992,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
             trackCount: hlsState.audioTrackCount,
           }
         : undefined,
-      lastFragment: lastMainFragment
-        ? {
-            level: lastMainFragment.level,
-            height: lastMainFragment.height,
-            bytes: lastMainFragment.bytes,
-            loadSeconds: lastMainFragment.loadSeconds,
-            ageSeconds: (capturedAt - lastMainFragment.timestamp) / 1000,
-          }
-        : undefined,
+      lastFragments: Object.keys(exportedLastFragments).length ? exportedLastFragments : undefined,
       pipeline: {
         load: formatFragLoadStages(fragLoadStages),
         append: formatBufferAppendStages(bufferAppendStages),
@@ -976,7 +1003,14 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
         lastCategory: lastFailure?.category,
         lastAgeSeconds: lastFailure ? (capturedAt - lastFailure.timestamp) / 1000 : undefined,
       },
-      decode: quality ? { totalFrames: quality.totalVideoFrames, droppedFrames: quality.droppedVideoFrames } : undefined,
+      decode:
+        quality || media?.decodeHealth.severity !== 'ok'
+          ? {
+              totalFrames: quality?.totalVideoFrames,
+              droppedFrames: quality?.droppedVideoFrames,
+              severity: media?.decodeHealth.severity,
+            }
+          : undefined,
       recovery: recovery
         ? { attempts: recovery.attempts, limit: recovery.limit, exhausted: recovery.exhausted, lastReason: recovery.lastReason }
         : undefined,
