@@ -4,3 +4,13 @@ dist/
 out/
 build/
 coverage/
+
+# agentic-repo-kit owns these bytes; formatting them would create generated drift.
+.agentic-repo.lock.json
+AGENTS.md
+CLAUDE.md
+.github/copilot-instructions.md
+.github/pull_request_template.md
+.github/workflows/agentic-repo-check.yml
+docs/agent-playbook.md
+docs/roadmap-authoring.md
