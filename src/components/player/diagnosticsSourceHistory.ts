@@ -16,11 +16,7 @@ function qualityLabel(quality: string | null) {
  * Tracks which selected quality belongs to an HLS instance without treating a transient player
  * selection change as proof that the old instance actually switched.
  */
-export function transitionHlsSource<T>(
-  previous: HlsSourceState<T> | null,
-  hls: T,
-  selectedQuality: string | null,
-): HlsSourceTransition<T> {
+export function transitionHlsSource<T>(previous: HlsSourceState<T> | null, hls: T, selectedQuality: string | null): HlsSourceTransition<T> {
   if (!previous) {
     return { state: { hls, quality: selectedQuality } };
   }
