@@ -8,6 +8,7 @@ import { RecoveryState } from 'components/media';
 
 import { EncodedCapture, ExportCapture, encodeCapture } from './diagnosticsExport';
 import DiagnosticsQr from './diagnosticsQr';
+import { HlsSourceState, settleHlsSourceQuality, transitionHlsSource } from './diagnosticsSourceHistory';
 import { getVideoNode } from './getVideoNode';
 
 import { APP_VERSION } from 'utils/app';
@@ -669,7 +670,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
   const [encodeError, setEncodeError] = useState<Nullable<string>>(null);
   const nextHistoryId = useRef(1);
   const pendingAppendStarts = useRef<Map<string, number>>(new Map());
-  const previousHlsSource = useRef<Nullable<{ hls: HLS; quality: Nullable<string> }>>(null);
+  const previousHlsSource = useRef<Nullable<HlsSourceState<HLS>>>(null);
 
   const pushHistory = useCallback((source: DiagnosticHistoryItem['source'], name: string, details?: string) => {
     setHistory((items) => [
@@ -726,27 +727,13 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
       return;
     }
 
-    const previous = previousHlsSource.current;
+    const transition = transitionHlsSource(previousHlsSource.current, target.hls, target.selectedQuality);
 
-    if (!previous) {
-      previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
-
-      return;
+    if (transition.change) {
+      pushHistory('hls', 'SOURCE_CHANGED', transition.change);
     }
 
-    if (previous.hls !== target.hls) {
-      pushHistory('hls', 'SOURCE_CHANGED', `${previous.quality || 'unknown'} -> ${target.selectedQuality || 'unknown'}`);
-      previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
-
-      return;
-    }
-
-    // The HLS object can become visible one polling tick before the player exposes its quality
-    // label. Fill that initial blank, but do not overwrite an established label before a replacement
-    // arrives — otherwise a transition can be misreported as `1080p -> 1080p`.
-    if (!previous.quality && target.selectedQuality) {
-      previousHlsSource.current = { hls: target.hls, quality: target.selectedQuality };
-    }
+    previousHlsSource.current = transition.state;
   }, [target.hls, target.selectedQuality, pushHistory]);
 
   useEffect(() => {
@@ -871,6 +858,10 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
           }));
         }
 
+        if (key === 'LEVEL_SWITCHED') {
+          previousHlsSource.current = settleHlsSourceQuality(previousHlsSource.current, hls, readMediaRef()?.sourceTrack || null);
+        }
+
         if (key === 'ERROR') {
           const category = getFailureCategory(data);
 
@@ -894,7 +885,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
       });
       pendingAppends.clear();
     };
-  }, [target.hls, pushHistory]);
+  }, [target.hls, pushHistory, readMediaRef]);
 
   useEffect(() => {
     if (!visible) {
