@@ -7,6 +7,8 @@ import useButtonEffect from 'hooks/useButtonEffect';
 import useDeviceAuthorizationEffect, { AuthorizationStep } from 'hooks/useDeviceAuthorizationEffect';
 import { PATHS } from 'routes';
 
+import { BUTTON_HANDLER_PRIORITY } from 'utils/keyboard';
+
 const Views: React.FC = ({ children, ...props }) => {
   const history = useHistory();
   const [showNotice, setShowNotice] = useState(false);
@@ -51,7 +53,9 @@ const Views: React.FC = ({ children, ...props }) => {
     };
   }, [authorizationStep]);
 
-  useButtonEffect('Back', handleBackButtonClick);
+  // Navigation is deliberately last for Back. Overlays and other local handlers get the first
+  // chance to consume the key regardless of component mount or re-registration order.
+  useButtonEffect('Back', handleBackButtonClick, BUTTON_HANDLER_PRIORITY.Navigation);
   useDeviceAuthorizationEffect(handleAuthorization);
 
   if (showSpinner) {

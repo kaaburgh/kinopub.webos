@@ -19,6 +19,12 @@ export const KeyboardCodes = {
   Settings: 10133,
 } as const;
 
+export const BUTTON_HANDLER_PRIORITY = {
+  Navigation: -100,
+  Default: 0,
+  Overlay: 100,
+} as const;
+
 export type KeyboardCodesKeys = keyof typeof KeyboardCodes;
 
 export function isKey(e: KeyboardEvent | React.KeyboardEvent, key: KeyboardCodesKeys | KeyboardCodesKeys[]) {
@@ -34,10 +40,15 @@ export function isBackButton(e: KeyboardEvent): boolean {
 
 export type ButtonClickHandler = (e: KeyboardEvent) => void | boolean | Promise<void> | Promise<boolean>;
 
-let BUTTON_HANDLERS: {
+type RegisteredButtonHandler = {
   key: KeyboardCodesKeys | KeyboardCodesKeys[];
   handler: ButtonClickHandler;
-}[];
+  priority: number;
+  order: number;
+};
+
+let BUTTON_HANDLERS: RegisteredButtonHandler[];
+let nextRegistrationOrder = 0;
 
 function listenButton() {
   window.addEventListener('keydown', async (e: KeyboardEvent) => {
@@ -62,14 +73,25 @@ function listenButton() {
   });
 }
 
-export function registerButtonHandler(key: KeyboardCodesKeys | KeyboardCodesKeys[], handler: ButtonClickHandler) {
+export function registerButtonHandler(
+  key: KeyboardCodesKeys | KeyboardCodesKeys[],
+  handler: ButtonClickHandler,
+  priority: number = BUTTON_HANDLER_PRIORITY.Default,
+) {
   if (!BUTTON_HANDLERS) {
     BUTTON_HANDLERS = [];
 
     listenButton();
   }
 
-  BUTTON_HANDLERS = [{ key, handler }, ...BUTTON_HANDLERS];
+  const registration: RegisteredButtonHandler = {
+    key,
+    handler,
+    priority,
+    order: nextRegistrationOrder++,
+  };
+
+  BUTTON_HANDLERS = [...BUTTON_HANDLERS, registration].sort((left, right) => right.priority - left.priority || right.order - left.order);
 
   return () => {
     BUTTON_HANDLERS = BUTTON_HANDLERS.filter((h) => h.handler !== handler);

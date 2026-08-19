@@ -10,6 +10,8 @@ type Param = Primitive | null | undefined | Param[] | { [key: string]: Param };
 
 type Params = Record<string, Param> | null;
 
+export const API_REQUEST_TIMEOUT_MS = 15 * 1000;
+
 function isPrimitive(value: any): value is Primitive {
   return value !== Object(value);
 }
@@ -34,6 +36,40 @@ export const normalizeParams = (params?: Params) =>
     .filter((key) => params?.[key] !== '' && params?.[key] !== null && params?.[key] !== undefined)
     .map((key) => (isArray(params?.[key]) ? normalizeArrayParams(key, params?.[key]! as Param[]) : `${key}=${encodeParam(params?.[key])}`))
     .join('&');
+
+export async function fetchWithTimeout(input: RequestInfo, init?: RequestInit, timeoutMs = API_REQUEST_TIMEOUT_MS): Promise<Response> {
+  if (typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // webOS is based on a browser old enough not to provide AbortController. Promise.race would leave
+  // the underlying fetch running too; spelling the fallback out lets us clear the timer when fetch
+  // settles while still giving the caller a bounded result when it does not.
+  return new Promise<Response>((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs);
+
+    fetch(input, init).then(
+      (response) => {
+        clearTimeout(timeoutId);
+        resolve(response);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
 
 class BaseApiClient {
   protected baseUrl: string;
@@ -73,13 +109,14 @@ class BaseApiClient {
     let response: Response;
 
     try {
-      response = await fetch(`${this.baseUrl}${url}?${normalizeParams(params)}`, {
+      response = await fetchWithTimeout(`${this.baseUrl}${url}?${normalizeParams(params)}`, {
         method,
         body: data && serialize(data),
       });
     } catch (ex) {
       // Nothing came back at all. Worth reporting even for an authorization request: the endpoint
-      // being unreachable is a fault whoever it belongs to.
+      // being unreachable is a fault whoever it belongs to. Timeouts intentionally use this same
+      // bounded failure path rather than adding a new response shape for callers.
       logApiFailure({ kind: 'unreachable', endpoint: url, method, reason: (ex as Error)?.message });
 
       return {

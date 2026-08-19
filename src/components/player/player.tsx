@@ -20,6 +20,7 @@ import StartFrom from './startFrom';
 
 import { DecodeHealth } from 'utils/decodeHealth';
 import { VideoRange, isHdrVideoRange } from 'utils/hdr';
+import { BUTTON_HANDLER_PRIORITY } from 'utils/keyboard';
 
 export type PlayerProps = {
   title: string;
@@ -150,6 +151,11 @@ const Player: React.FC<PlayerProps> = ({
       await onTimeSync(currentTime);
     }
   }, [onTimeSync, playerRef]);
+  const handleBackTimeSync = useCallback(() => {
+    // Leaving the player must not wait for the progress POST. The API request itself is bounded too,
+    // so this cannot leave an indefinitely hung operation behind on browsers without AbortController.
+    void handleTimeSync();
+  }, [handleTimeSync]);
   const handleLoadedMetadata = useCallback(() => {
     setIsLoaded(true);
   }, []);
@@ -287,13 +293,13 @@ const Player: React.FC<PlayerProps> = ({
     setFailure(undefined);
   }, []);
 
-  useButtonEffect('Back', handleTimeSync);
+  useButtonEffect('Back', handleBackTimeSync);
   useButtonEffect('Blue', handleSettingsOpen);
   useButtonEffect('Play', handleSettingsClose);
   useButtonEffect('Pause', handlePauseButton);
   useButtonEffect('Enter', handlePlayPause);
   useButtonEffect('ArrowUp', handleSettingsOpen);
-  useButtonEffect('Back', handleDiagnosticsClose);
+  useButtonEffect('Back', handleDiagnosticsClose, BUTTON_HANDLER_PRIORITY.Overlay);
   useButtonEffect('Yellow', handleDiagnosticsExportButton);
 
   return (
