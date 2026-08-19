@@ -91,9 +91,7 @@ export function registerButtonHandler(
     order: nextRegistrationOrder++,
   };
 
-  BUTTON_HANDLERS = [...BUTTON_HANDLERS, registration].sort(
-    (left, right) => right.priority - left.priority || right.order - left.order,
-  );
+  BUTTON_HANDLERS = [...BUTTON_HANDLERS, registration].sort((left, right) => right.priority - left.priority || right.order - left.order);
 
   return () => {
     BUTTON_HANDLERS = BUTTON_HANDLERS.filter((h) => h.handler !== handler);

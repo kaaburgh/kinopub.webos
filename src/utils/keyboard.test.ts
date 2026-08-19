@@ -33,6 +33,31 @@ describe('button handler priority', () => {
     }
   });
 
+  it('keeps a visible overlay ahead of a later default re-registration', async () => {
+    const calls: string[] = [];
+    const unregisterOverlay = registerButtonHandler(
+      'Back',
+      () => {
+        calls.push('overlay');
+        return false;
+      },
+      BUTTON_HANDLER_PRIORITY.Overlay,
+    );
+    const unregisterDefault = registerButtonHandler('Back', () => {
+      calls.push('default');
+    });
+
+    try {
+      triggerButtonClick('Back');
+      await flushHandlers();
+
+      expect(calls).toEqual(['overlay']);
+    } finally {
+      unregisterOverlay();
+      unregisterDefault();
+    }
+  });
+
   it('reaches navigation after a higher-priority handler declines to consume Back', async () => {
     const calls: string[] = [];
     const unregisterNavigation = registerButtonHandler(

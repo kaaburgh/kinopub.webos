@@ -6,6 +6,7 @@ import Text from 'components/text';
 import useButtonEffect from 'hooks/useButtonEffect';
 import useDeviceAuthorizationEffect, { AuthorizationStep } from 'hooks/useDeviceAuthorizationEffect';
 import { PATHS } from 'routes';
+
 import { BUTTON_HANDLER_PRIORITY } from 'utils/keyboard';
 
 const Views: React.FC = ({ children, ...props }) => {

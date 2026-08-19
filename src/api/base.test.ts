@@ -21,7 +21,10 @@ describe('fetchWithTimeout', () => {
   it('fails in bounded time when AbortController is unavailable', async () => {
     jest.useFakeTimers();
     setWindowValue('AbortController', undefined);
-    setWindowValue('fetch', jest.fn(() => new Promise<Response>(() => undefined)));
+    setWindowValue(
+      'fetch',
+      jest.fn(() => new Promise<Response>(() => undefined)),
+    );
 
     const request = fetchWithTimeout('/slow', undefined, 25);
 

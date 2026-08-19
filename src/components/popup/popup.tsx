@@ -6,6 +6,7 @@ import Scrollable from 'components/scrollable';
 import SpotlightContainer from 'components/spotlightContainer';
 import useButtonEffect, { KeyboardCodesKeys } from 'hooks/useButtonEffect';
 import useHashTrigger from 'hooks/useHashTrigger';
+import { BUTTON_HANDLER_PRIORITY } from 'utils/keyboard';
 
 type Props = {
   visible: boolean;
@@ -56,7 +57,7 @@ const Popup: React.FC<Props> = ({ visible, onClose, children, className, closeBu
     });
   }, []);
 
-  useButtonEffect('Back', handleCloseIfVisible);
+  useButtonEffect('Back', handleCloseIfVisible, BUTTON_HANDLER_PRIORITY.Overlay);
   useButtonEffect('ArrowUp', scrollActiveElementIntoView);
   useButtonEffect('ArrowDown', scrollActiveElementIntoView);
   useButtonEffect(closeButton, handleCloseIfVisible);
