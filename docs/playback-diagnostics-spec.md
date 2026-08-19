@@ -319,7 +319,7 @@ characters after deflate and Base32, and fits one 77x77-module QR at error-corre
 
 ### Chunk header
 
-Each QR carries `KPD<version><D|P><index><count>.<base32>`, for example `KPD1D11.MFRGG…`. `D` marks
+Each QR carries `KPD<version><D|P><index><count>.<base32>`, for example `KPD2D11.MFRGG…`. `D` marks
 a deflated body and `P` a plain one. Index and count are single digits, so a capture is limited to
 `MAX_CHUNKS` (9) codes; beyond that the encoder halves the event history and retries, reporting how
 many events it dropped. If even a zero-event capture would not fit, it throws instead of emitting
@@ -332,11 +332,12 @@ captures, and concatenating mismatched halves would yield a plausible-looking bu
 
 ### Decoder
 
-`scripts/decode-diagnostics.js` is the reference decoder and the contract for the format:
+`scripts/decode-diagnostics.js` is the reference decoder and the contract for the format. Format v2
+is what the current encoder emits; the decoder remains backward-compatible with existing v1 captures.
 
 ```sh
-node scripts/decode-diagnostics.js "KPD1D11.MFRGG…"     # human-readable report
-node scripts/decode-diagnostics.js --json "KPD1D11.…"   # structured output
+node scripts/decode-diagnostics.js "KPD2D11.MFRGG…"     # human-readable report
+node scripts/decode-diagnostics.js --json "KPD2D11.…"   # structured output
 ```
 
 Chunks may be passed in any order; a missing one is reported rather than silently dropped. Any

@@ -15,7 +15,7 @@
  * FORMAT_VERSION and EVENT_CODES below.
  */
 
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 export const PAYLOAD_PREFIX = 'KPD';
 
 /**
@@ -50,6 +50,7 @@ export const EVENT_CODES = [
   'BUFFER_APPENDED',
   'LEVEL_SWITCHED',
   'ERROR',
+  'SOURCE_CHANGED',
 ];
 
 const EVENT_CODE_BY_NAME = new Map(EVENT_CODES.map((name, index) => [name, index]));
@@ -61,6 +62,14 @@ export type ExportEvent = {
   source: 'video' | 'hls';
   name: string;
   details?: string;
+};
+
+export type ExportFragment = {
+  level?: number;
+  height?: number;
+  bytes?: number;
+  loadSeconds?: number;
+  ageSeconds?: number;
 };
 
 export type ExportCapture = {
@@ -109,13 +118,8 @@ export type ExportCapture = {
     playingName?: string;
     trackCount: number;
   };
-  lastFragment?: {
-    level?: number;
-    height?: number;
-    bytes?: number;
-    loadSeconds?: number;
-    ageSeconds?: number;
-  };
+  /** Keyed by `frag.type` (`main`, `audio`, `subtitle`) to match the overlay. */
+  lastFragments?: Record<string, ExportFragment>;
   pipeline?: {
     load: string;
     append: string;
@@ -130,8 +134,9 @@ export type ExportCapture = {
     lastAgeSeconds?: number;
   };
   decode?: {
-    totalFrames: number;
-    droppedFrames: number;
+    totalFrames?: number;
+    droppedFrames?: number;
+    severity?: 'ok' | 'warning' | 'severe';
   };
   recovery?: {
     attempts: number;
@@ -164,6 +169,22 @@ function num(value: number | undefined, digits = 0) {
 
 function bool(value: boolean | undefined) {
   return value ? '1' : '0';
+}
+
+function streamOrder(left: string, right: string) {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left === 'main') {
+    return -1;
+  }
+
+  if (right === 'main') {
+    return 1;
+  }
+
+  return left < right ? -1 : 1;
 }
 
 /**
@@ -212,10 +233,18 @@ export function buildCompactText(capture: ExportCapture) {
     lines.push(`a|${clean(a.selectedName)}|${num(a.selectedIndex)}|${num(a.playingIndex)}|${a.trackCount}|${clean(a.playingName)}`);
   }
 
-  if (capture.lastFragment) {
-    const f = capture.lastFragment;
+  if (capture.lastFragments) {
+    Object.keys(capture.lastFragments)
+      .sort(streamOrder)
+      .forEach((streamType) => {
+        const f = capture.lastFragments?.[streamType];
 
-    lines.push(`f|${num(f.level)}|${num(f.height)}|${num(f.bytes)}|${num(f.loadSeconds, 2)}|${num(f.ageSeconds, 1)}`);
+        if (f) {
+          lines.push(
+            `f|${clean(streamType)}|${num(f.level)}|${num(f.height)}|${num(f.bytes)}|${num(f.loadSeconds, 2)}|${num(f.ageSeconds, 1)}`,
+          );
+        }
+      });
   }
 
   if (capture.pipeline) {
@@ -231,7 +260,7 @@ export function buildCompactText(capture: ExportCapture) {
   }
 
   if (capture.decode) {
-    lines.push(`q|${capture.decode.totalFrames}|${capture.decode.droppedFrames}`);
+    lines.push(`q|${num(capture.decode.totalFrames)}|${num(capture.decode.droppedFrames)}|${clean(capture.decode.severity)}`);
   }
 
   if (capture.recovery) {

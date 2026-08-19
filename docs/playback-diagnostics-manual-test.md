@@ -163,7 +163,7 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
   code size.
 - Confirm a single code is shown for a normal capture; `Часть N из M` labels only appear if the
   payload needed splitting.
-- Scan it with a phone camera and confirm it decodes to a text string starting with `KPD1`.
+- Scan it with a phone camera and confirm it decodes to a text string starting with `KPD2`.
 - Run the decoder and confirm the report matches what the overlay showed:
 
   ```sh

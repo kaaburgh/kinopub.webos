@@ -667,7 +667,15 @@ which now records it.
 
 ### A8 — Make the QR capture carry everything the overlay shows
 
-- **Status:** Open
+> **Implemented, validation incomplete.** The QR payload now uses format v2 and carries the latest
+> fragment separately for each HLS stream, the decode-health severity, and an explicit
+> `SOURCE_CHANGED` seam across HLS replacement. The reference decoder remains backward-compatible
+> with v1 captures. Regression coverage exercises v2 round-tripping, legacy v1 decoding, and settled
+> in-place quality switches before HLS replacement. **Still open:** the two acceptance checks below
+> require an LG G5 capture with alternate audio and a quality switch. The problem/evidence/direction
+> below are retained as the pre-implementation rationale.
+
+- **Status:** Completed, validation incomplete
 - **Depends on:** None
 - **Priority:** Medium
 - **Category:** Diagnostics correctness

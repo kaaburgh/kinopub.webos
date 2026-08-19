@@ -4,8 +4,8 @@
  * `src/components/player/diagnosticsExport.ts`.
  *
  * Usage:
- *   node scripts/decode-diagnostics.js "KPD1D11.MFRGG..."
- *   node scripts/decode-diagnostics.js "KPD1D12.AAA..." "KPD1D22.BBB..."
+ *   node scripts/decode-diagnostics.js "KPD2D11.MFRGG..."
+ *   node scripts/decode-diagnostics.js "KPD2D12.AAA..." "KPD2D22.BBB..."
  *   pbpaste | node scripts/decode-diagnostics.js
  *
  * Chunks may be passed in any order; they are reassembled by their index header. Add `--json` to
@@ -39,6 +39,7 @@ const EVENT_CODES = [
   'BUFFER_APPENDED',
   'LEVEL_SWITCHED',
   'ERROR',
+  'SOURCE_CHANGED',
 ];
 
 const CHUNK_PATTERN = /^KPD(\d+)([DP])(\d)(\d)\.([A-Z2-7]*)$/;
@@ -136,6 +137,28 @@ function optional(value) {
   return value === '' || value === undefined ? undefined : value;
 }
 
+function optionalNumber(value) {
+  const present = optional(value);
+
+  return present === undefined ? undefined : Number(present);
+}
+
+function streamOrder(left, right) {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left === 'main') {
+    return -1;
+  }
+
+  if (right === 'main') {
+    return 1;
+  }
+
+  return left < right ? -1 : 1;
+}
+
 function parseCompactText(text) {
   const report = { events: [] };
   let clock;
@@ -192,13 +215,27 @@ function parseCompactText(text) {
     } else if (tag === 'l') {
       report.levels = optional(parts[1]);
     } else if (tag === 'f') {
-      report.lastFragment = {
-        level: optional(parts[1]),
-        height: optional(parts[2]),
-        bytes: optional(parts[3]),
-        loadSeconds: optional(parts[4]),
-        ageSeconds: optional(parts[5]),
+      // v1 carried one implicit main-stream fragment. v2 repeats the line and names the stream, so
+      // alternate audio and subtitle traffic survive the transfer as distinct facts.
+      const version = report.formatVersion || 1;
+      const streamType = version >= 2 ? optional(parts[1]) || 'unknown' : 'main';
+      const offset = version >= 2 ? 2 : 1;
+      const fragment = {
+        level: optional(parts[offset]),
+        height: optional(parts[offset + 1]),
+        bytes: optional(parts[offset + 2]),
+        loadSeconds: optional(parts[offset + 3]),
+        ageSeconds: optional(parts[offset + 4]),
       };
+
+      report.lastFragments = report.lastFragments || {};
+      report.lastFragments[streamType] = fragment;
+
+      // Keep the old JSON property for callers decoding a v1 capture. Human formatting uses the
+      // per-stream map for both versions.
+      if (version < 2) {
+        report.lastFragment = fragment;
+      }
     } else if (tag === 's') {
       report.pipeline = { load: optional(parts[1]), append: optional(parts[2]), emergencyAborts: Number(parts[3]) };
     } else if (tag === 'e') {
@@ -211,7 +248,11 @@ function parseCompactText(text) {
         lastAgeSeconds: optional(parts[6]),
       };
     } else if (tag === 'q') {
-      report.decode = { totalFrames: Number(parts[1]), droppedFrames: Number(parts[2]) };
+      report.decode = {
+        totalFrames: optionalNumber(parts[1]),
+        droppedFrames: optionalNumber(parts[2]),
+        severity: optional(parts[3]),
+      };
     } else if (tag === 'r') {
       report.recovery = {
         attempts: Number(parts[1]),
@@ -296,14 +337,19 @@ function formatReport(report) {
     );
   }
 
-  if (report.lastFragment) {
-    const f = report.lastFragment;
+  if (report.lastFragments) {
+    Object.keys(report.lastFragments)
+      .sort(streamOrder)
+      .forEach((streamType) => {
+        const f = report.lastFragments[streamType];
+        const levelLabel = streamType === 'main' ? 'level' : 'track';
 
-    lines.push(
-      `lastFrag: level=${f.level ?? 'n/a'} height=${f.height ?? 'n/a'} bytes=${f.bytes ?? 'n/a'} load=${f.loadSeconds ?? 'n/a'}s age=${
-        f.ageSeconds ?? 'n/a'
-      }s`,
-    );
+        lines.push(
+          `lastFrag[${streamType}]: ${levelLabel}=${f.level ?? 'n/a'} height=${f.height ?? 'n/a'} bytes=${f.bytes ?? 'n/a'} load=${
+            f.loadSeconds ?? 'n/a'
+          }s age=${f.ageSeconds ?? 'n/a'}s`,
+        );
+      });
   }
 
   if (report.pipeline) {
@@ -322,7 +368,11 @@ function formatReport(report) {
   }
 
   if (report.decode) {
-    lines.push(`decode:   frames=${report.decode.totalFrames} dropped=${report.decode.droppedFrames}`);
+    lines.push(
+      `decode:   frames=${report.decode.totalFrames ?? 'n/a'} dropped=${report.decode.droppedFrames ?? 'n/a'} severity=${
+        report.decode.severity || 'n/a'
+      }`,
+    );
   }
 
   if (report.recovery) {
