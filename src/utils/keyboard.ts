@@ -76,7 +76,7 @@ function listenButton() {
 export function registerButtonHandler(
   key: KeyboardCodesKeys | KeyboardCodesKeys[],
   handler: ButtonClickHandler,
-  priority = BUTTON_HANDLER_PRIORITY.Default,
+  priority: number = BUTTON_HANDLER_PRIORITY.Default,
 ) {
   if (!BUTTON_HANDLERS) {
     BUTTON_HANDLERS = [];
