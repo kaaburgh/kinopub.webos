@@ -4,6 +4,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import MoonstoneDecorator from '@enact/moonstone/MoonstoneDecorator';
 
+import ErrorBoundary from 'components/errorBoundary/errorBoundary';
 import Router from 'components/router';
 import View from 'components/view';
 import Views from 'containers/views';
@@ -46,30 +47,32 @@ const App: React.FC<Props> = (props) => {
   return (
     <Router>
       <QueryClientProvider client={queryClient}>
-        <Views {...props}>
-          <View path={PATHS.Index} component={IndexView} layout="fill" exact />
-          <View path={PATHS.Home} component={HomeView} />
-          <View path={PATHS.Search} component={SearchView} />
-          <View path={PATHS.Category} component={CategoryView} />
-          <View path={PATHS.Genre} component={GenreView} />
-          <View path={PATHS.Watching} component={WatchingView} />
-          <View path={PATHS.Releases} component={ReleasesView} />
-          <View path={PATHS.Bookmark} component={BookmarkView} />
-          <View path={PATHS.Bookmarks} component={BookmarksView} />
-          <View path={PATHS.Collection} component={CollectionView} />
-          <View path={PATHS.Collections} component={CollectionsView} />
-          <View path={PATHS.Channel} component={ChannelView} layout="fill" />
-          <View path={PATHS.Channels} component={ChannelsView} />
-          <View path={PATHS.History} component={HistoryView} />
-          <View path={PATHS.Item} component={ItemView} layout="fill" />
-          <View path={PATHS.Video} component={VideoView} layout="fill" />
-          <View path={PATHS.Trailer} component={TrailerView} layout="fill" />
-          <View path={PATHS.Pair} component={PairView} layout="fill" />
-          <View path={PATHS.Donate} component={DonateView} />
-          <View path={PATHS.Speed} component={SpeedView} />
-          <View path={PATHS.Settings} component={SettingsView} />
-          <View component={NotFoundView} />
-        </Views>
+        <ErrorBoundary>
+          <Views {...props}>
+            <View path={PATHS.Index} component={IndexView} layout="fill" exact />
+            <View path={PATHS.Home} component={HomeView} />
+            <View path={PATHS.Search} component={SearchView} />
+            <View path={PATHS.Category} component={CategoryView} />
+            <View path={PATHS.Genre} component={GenreView} />
+            <View path={PATHS.Watching} component={WatchingView} />
+            <View path={PATHS.Releases} component={ReleasesView} />
+            <View path={PATHS.Bookmark} component={BookmarkView} />
+            <View path={PATHS.Bookmarks} component={BookmarksView} />
+            <View path={PATHS.Collection} component={CollectionView} />
+            <View path={PATHS.Collections} component={CollectionsView} />
+            <View path={PATHS.Channel} component={ChannelView} layout="fill" />
+            <View path={PATHS.Channels} component={ChannelsView} />
+            <View path={PATHS.History} component={HistoryView} />
+            <View path={PATHS.Item} component={ItemView} layout="fill" />
+            <View path={PATHS.Video} component={VideoView} layout="fill" />
+            <View path={PATHS.Trailer} component={TrailerView} layout="fill" />
+            <View path={PATHS.Pair} component={PairView} layout="fill" />
+            <View path={PATHS.Donate} component={DonateView} />
+            <View path={PATHS.Speed} component={SpeedView} />
+            <View path={PATHS.Settings} component={SettingsView} />
+            <View component={NotFoundView} />
+          </Views>
+        </ErrorBoundary>
       </QueryClientProvider>
     </Router>
   );
