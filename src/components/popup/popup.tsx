@@ -6,6 +6,7 @@ import Scrollable from 'components/scrollable';
 import SpotlightContainer from 'components/spotlightContainer';
 import useButtonEffect, { KeyboardCodesKeys } from 'hooks/useButtonEffect';
 import useHashTrigger from 'hooks/useHashTrigger';
+
 import { BUTTON_HANDLER_PRIORITY } from 'utils/keyboard';
 
 type Props = {
