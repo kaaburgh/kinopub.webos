@@ -711,39 +711,47 @@ which now records it.
 
 ### A9 — Bound API requests, and stop Back from waiting on one
 
-- **Status:** Open
+> **Implemented, validation incomplete.** All API requests now have a 15 s deadline. Runtimes with
+> `AbortController` abort the underlying fetch; the Chrome-35-compatible fallback rejects the caller
+> on the same deadline without assuming that DOM API exists. Back no longer awaits the player progress
+> sync, and the remote-key stack has explicit priorities so overlays/local interception run before
+> route navigation independently of mount or re-registration order. Focused tests cover the timeout
+> fallback, successful-request timer cleanup, priority ordering, and popup consumption after a later
+> default-priority registration. Exact-head CI was green on implementation head
+> `90559219b7d1ddb6a71aa2d40e9c789b996d2c02`. **Still open:** the acceptance checks below require a
+> real network failure on the target runtime/device; synthetic tests do not establish real webOS
+> network behaviour.
+
+- **Status:** Completed, validation incomplete
 - **Depends on:** None
 - **Priority:** Medium
 - **Category:** Robustness / UX
 - **Origin:** Review §4.11
-- **Problem or opportunity:** No request in the application has a deadline, and the remote-key stack
-  awaits each handler in turn — so leaving the player waits for a progress-sync POST to finish or
-  fail. During a network failure, which is when a viewer most wants to leave.
-- **Concrete evidence:** `grep -rn "AbortController\|timeout" src/api/` returns nothing.
-  `src/utils/keyboard.ts:51-61` iterates all matching handlers and `await`s each, breaking only on an
-  explicit `false`; registration prepends (`:72`), so the most recent registrant runs first. On Back
-  the chain is `handleDiagnosticsClose` (`player.tsx:243`), then `handleTimeSync` (`:237`, awaiting
-  `watchingMarkTimeAsync`), then `containers/views/views.tsx:54` → `history.goBack()`. That order is
-  an accident of mount timing rather than an invariant — see §4.11 for why, and for how
-  re-registration can reorder it.
-- **Motivation and expected benefit:** Makes the app escapable in the one state where it currently is
-  not, and makes every API call fail in bounded time.
-- **Proposed direction:** Add an `AbortController` timeout in `src/api/base.ts`, and do not await the
-  progress sync on the Back path — fire it and let navigation proceed. Do **not** simply document the
-  handler ordering: it is load-bearing but emergent, falling out of which component happened to mount
-  last and re-shuffling whenever a handler identity changes, so writing it down would enshrine an
-  accident. Give `registerButtonHandler` an explicit priority (or an ordered insert) so the contract
-  is stated rather than inferred.
-- **Dependencies and sequencing:** Pairs with **A3**; the timeout gives it something to report.
-- **Compatibility risks:** `AbortController` is Chrome 66 and the target is `chrome 35`; `core-js`
-  does not polyfill DOM APIs, so it needs a `typeof` guard exactly like `CompressionStream`
-  (`diagnosticsExport.ts:277-286`). A `Promise.race` timeout is the guard-free fallback, though it
-  leaves the request running.
-- **Confidence:** code — high on the mechanism and on the ordering. How long webOS's `fetch` takes to
-  abandon a hung connection is unknown, and that number decides whether this is an annoyance or a
-  hang.
+- **Problem or opportunity:** No request in the application had a deadline, and the remote-key stack
+  awaited each handler in turn — so leaving the player could wait for a progress-sync POST to finish
+  or fail. During a network failure, which is when a viewer most wants to leave.
+- **Concrete evidence:** `src/api/base.ts` now enforces a 15 s deadline with an `AbortController` guard
+  and a Promise timeout fallback; `src/components/player/player.tsx` starts progress sync without
+  awaiting it on Back; `src/utils/keyboard.ts` orders handlers by explicit priority while preserving
+  newest-registration-first semantics within one priority. Views navigation is lowest priority and
+  popup/diagnostics interception uses overlay priority. Unit coverage exercises the no-
+  `AbortController` path and deterministic Back ordering.
+- **Motivation and expected benefit:** Makes the app escapable in the one state where it previously
+  was not, and makes every API call fail in bounded application time.
+- **Implemented direction:** The shared API path races every request against a 15 s timeout and aborts
+  the underlying fetch where supported; older webOS falls back to a bounded caller-visible rejection.
+  Progress sync on Back is fire-and-forget. `registerButtonHandler` exposes explicit numeric priority,
+  with overlay/local handlers above route navigation so ordering no longer depends on mount timing.
+- **Dependencies and sequencing:** Pairs with **A3**; timeout failures continue through the existing
+  API error/reporting path.
+- **Compatibility risks:** `AbortController` is Chrome 66 and the target is `chrome 35`, so the guarded
+  fallback is intentional and covered by tests. On the fallback path the underlying legacy fetch can
+  continue after the caller has timed out; the application no longer waits for it.
+- **Confidence:** code/runtime — high for bounded caller-visible behaviour and explicit handler
+  ordering; device — not yet established for real network-drop behaviour.
 - **Validation and acceptance criteria:** With the network dropped mid-playback, Back leaves the
   player without a perceptible delay; a request against an unreachable host fails within the timeout.
+  These two real-network observations remain outstanding.
 - **Estimated scope:** Small.
 
 ### A10 — Add a render error boundary
