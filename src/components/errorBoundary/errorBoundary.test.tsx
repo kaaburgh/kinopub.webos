@@ -2,12 +2,12 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 
 import ErrorBoundary from './errorBoundary';
+
 import { logException } from 'utils/logging';
 
-jest.mock(
-  'components/button',
-  () => ({ children, onClick }: React.PropsWithChildren<{ onClick?: () => void }>) => <button onClick={onClick}>{children}</button>,
-);
+jest.mock('components/button', () => ({ children, onClick }: React.PropsWithChildren<{ onClick?: () => void }>) => (
+  <button onClick={onClick}>{children}</button>
+));
 
 jest.mock('utils/logging', () => ({
   logException: jest.fn(),

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import Button from 'components/button';
+
 import { logException } from 'utils/logging';
 
 type Props = {
@@ -46,10 +47,7 @@ class ErrorBoundary extends React.Component<Props, State> {
     }
 
     return (
-      <div
-        className="absolute top-0 right-0 bottom-0 left-0 flex items-center justify-center bg-black text-white"
-        role="alert"
-      >
+      <div className="absolute top-0 right-0 bottom-0 left-0 flex items-center justify-center bg-black text-white" role="alert">
         <div className="mx-8 flex max-w-3xl flex-col items-center px-8 py-6 text-center">
           <div className="mb-2 text-3xl font-bold">Ошибка приложения</div>
           <div className="mb-5 text-xl">Не удалось показать этот экран.</div>
