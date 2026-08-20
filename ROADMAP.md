@@ -825,8 +825,8 @@ which now records it.
 
 ### A18 — A web build for reproducing playback problems, with scripted scenarios
 
-- **Status:** Partially implemented — scripted scenarios and the browser Sentry gate exist; the
-  browser harness does not
+- **Status:** Partially implemented — scripted scenarios, the browser Sentry gate, and the first local
+  refused-segment browser procedure exist; the remaining browser scenarios do not
 - **Depends on:** None
 - **Priority:** Medium
 - **Category:** Test infrastructure
@@ -853,11 +853,23 @@ which now records it.
 > Focused regression coverage checks HTTP, HTTPS, and packaged-file classification. This prevents a
 > local or preview browser reproduction session from reporting into the television's Sentry project.
 >
-> What remains open is the browser harness: a seek into an unbuffered region against the real CDN,
-> bandwidth collapse driving real ABR, and the other real-network playback cases below. The previous
-> plan to use that browser harness to prove **A2** Sentry delivery is no longer valid: the gate
-> intentionally disables Sentry in browser sessions, so actual teardown-event delivery remains a
-> television acceptance check under **A2**, not an A18 browser result.
+> **The first browser procedure now exists, but has not yet produced runtime evidence.**
+> `docs/browser-scenarios/refused-segment.js` launches Chromium through a locally available
+> Playwright installation and leaves ordinary backend/CDN traffic real. After playback is visibly
+> progressing, the operator arms the script; it will select a target only when both an explicit CDN
+> hostname and a mandatory non-secret media-fragment path discriminator match, then abort that exact
+> request and its retries. The selected full URL stays in process memory and is never printed. The
+> documented expected end state is the existing `Повторить` terminal failure notice. If a safe path
+> discriminator cannot distinguish media segments from keys, subtitles, and unrelated CDN requests,
+> the procedure fails closed and the run must not be counted as refused-segment evidence. This
+> GitHub-only agent environment has not executed the real-backend/CDN procedure, so reproducibility
+> remains unestablished rather than inferred from code or CI.
+>
+> What remains open is the rest of the browser harness: a non-fatal stall, a seek into an unbuffered
+> region against the real CDN, bandwidth collapse driving real ABR, and the teardown-path case below.
+> The previous plan to use that browser harness to prove **A2** Sentry delivery is no longer valid:
+> the gate intentionally disables Sentry in browser sessions, so actual teardown-event delivery
+> remains a television acceptance check under **A2**, not an A18 browser result.
 
 - **Problem or opportunity:** Every open investigation in this roadmap is gated on somebody sitting
   in front of a television at the moment a rare failure happens, then reading it back through a QR
@@ -869,14 +881,17 @@ which now records it.
   `BrowserRouter` when the origin is http, `yarn start` serves it, and until **A4** it was built and
   published on every push to `master`. What was removed was the _public_ deployment, not the
   capability. `isWebRuntime` now makes that distinction directly testable, and browser sessions skip
-  `Sentry.init` while packaged `file:` execution keeps the television telemetry path. Meanwhile
-  **A5** (decode thresholds), **A6** (does the watchdog rescue anything, and why does the CDN answer
-  `HTTP 0` after a seek) and **A11** (cost of always-on diagnostics) still need device evidence; the
-  browser harness can shorten reproduction work but cannot replace those target observations.
+  `Sentry.init` while packaged `file:` execution keeps the television telemetry path.
+  `docs/browser-scenarios/refused-segment.js` and its README now define the first local browser
+  procedure, including the mandatory fail-closed fragment discriminator and the privacy boundary;
+  the real-backend/CDN run has not yet been executed. Meanwhile **A5** (decode thresholds), **A6**
+  (does the watchdog rescue anything, and why does the CDN answer `HTTP 0` after a seek) and **A11**
+  (cost of always-on diagnostics) still need device evidence; the browser harness can shorten
+  reproduction work but cannot replace those target observations.
 - **Motivation and expected benefit:** The specific scenarios worth scripting are the ones already
   observed on the TV and never reproduced on demand:
-  - a segment the CDN refuses — block one fragment URL and confirm the fatal-error budget drains,
-    the backoff escalates, and the failure notice appears;
+  - a segment the CDN refuses — the documented procedure now exists; once executed reproducibly it
+    should confirm the fatal-error budget drains, the backoff escalates, and the failure notice appears;
   - a non-fatal stall — block segments without letting hls.js escalate, and confirm the watchdog's
     restart/reload escalation and then the notice;
   - a seek into an unbuffered region, which is the condition under which `HTTP 0` was captured;
@@ -884,11 +899,11 @@ which now records it.
   - a stall followed by leaving the player, to exercise the application-side teardown path; actual
     Sentry delivery remains under **A2** because browser Sentry is deliberately disabled.
 - **Proposed direction:** Local or preview-only, never a permanent public URL: **A4** removed that
-  for a reason and this must not quietly restore it. The browser Sentry gate is now in place. Next,
-  add a small Playwright script per scenario, driving the app with request interception; Chromium and
-  Playwright are already available in the development container. Keep the scripts beside `docs/` as
-  documented procedures, not as CI jobs — they exercise a real backend and a real CDN, which does
-  not belong in CI.
+  for a reason and this must not quietly restore it. The browser Sentry gate and the first
+  refused-segment procedure are now in place. Execute that procedure before claiming it is
+  reproducible; then add one small Playwright script per remaining scenario, driving the app with
+  request interception. Keep the scripts beside `docs/` as documented procedures, not as CI jobs —
+  they exercise a real backend and a real CDN, which does not belong in CI.
 - **Dependencies and sequencing:** The Sentry gate prerequisite is complete. Nothing else blocks the
   browser harness. Doing it before another TV session would make that session far more productive.
 - **Compatibility risks:** The honest limit, and it should be written into the scripts rather than
@@ -897,16 +912,20 @@ which now records it.
   implementation all differ. A scenario that reproduces in a browser proves the _application_ logic
   handles it; one that does not reproduce proves nothing about the TV. Decode-health thresholds
   (**A5**) in particular cannot be validated this way.
-- **Confidence:** code — high for the browser classification and Sentry wiring; runtime — focused
-  tests cover HTTP/HTTPS versus packaged-file classification. Unknown whether the specific
-  real-network failures reproduce in a browser at all.
+- **Confidence:** code — high for the browser classification, Sentry wiring, and the first procedure's
+  fail-closed request selection/privacy rules; runtime — focused tests cover HTTP/HTTPS versus
+  packaged-file classification. The refused-segment real-network procedure itself has not been run,
+  so its runtime reproducibility is unknown; all LG-device behaviour remains device evidence only.
 - **Validation and acceptance criteria:** Each browser scenario drives the player to a named,
   observable application end state — for example budget exhausted, notice shown, ABR level changed,
-  or teardown completed — reproducibly, from a documented command. A scenario that only works
-  sometimes is not finished. The browser gate itself is covered by focused runtime classification
-  tests; actual Sentry delivery remains device evidence under **A2** and is not an A18 browser
-  acceptance criterion.
-- **Estimated scope:** Medium. Small per scenario now that the Sentry gate exists.
+  or teardown completed — reproducibly, from a documented command. For the refused-segment case,
+  evidence is valid only when the configured non-secret discriminator uniquely selects media
+  fragments rather than keys/subtitles/other CDN requests. A scenario that only works sometimes is
+  not finished. The browser gate itself is covered by focused runtime classification tests; actual
+  Sentry delivery remains device evidence under **A2** and is not an A18 browser acceptance
+  criterion.
+- **Estimated scope:** Medium. Small per remaining scenario now that the Sentry gate and first
+  procedure exist.
 
 ### A20 — Media recovery is a blunt instrument for the errors it is used on
 
