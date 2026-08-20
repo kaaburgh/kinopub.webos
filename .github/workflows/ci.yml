@@ -31,7 +31,15 @@ jobs:
         run: yarn lint
 
       - name: Prettier
-        run: yarn format:check
+        run: |
+          if yarn format:check; then
+            exit 0
+          fi
+          yarn prettier ROADMAP.md --write
+          echo '::group::Prettier ROADMAP diff'
+          git diff -- ROADMAP.md
+          echo '::endgroup::'
+          exit 1
 
       # `yarn build` type checks as well, but only after a full webpack build.
       # Running tsc separately reports type errors in about a minute.
