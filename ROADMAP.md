@@ -825,7 +825,8 @@ which now records it.
 
 ### A18 — A web build for reproducing playback problems, with scripted scenarios
 
-- **Status:** Partially implemented — the scripted scenarios exist; the browser build does not
+- **Status:** Partially implemented — scripted scenarios and the browser Sentry gate exist; the
+  browser harness does not
 - **Depends on:** None
 - **Priority:** Medium
 - **Category:** Test infrastructure
@@ -846,10 +847,17 @@ which now records it.
 > is meaningful and its level choice is deterministic. That covers quality switching, moving between
 > audio groups, and ABR adapting to a link that cannot carry the top rendition.
 >
-> What remains open is the browser build, and the scenarios it alone can cover: a seek into an
-> unbuffered region against the real CDN, bandwidth collapse driving real ABR, and confirming a
-> `teardown` episode is delivered to Sentry rather than merely queued (**A2**). Those need a real
-> network and a real Sentry, which is exactly what does not belong in a test suite.
+> **The browser-safety prerequisite is now implemented.** `src/utils/enviroment.ts` exposes the
+> existing HTTP/HTTPS origin distinction through a testable runtime helper, and `src/utils/logging.ts`
+> skips `Sentry.init` for that browser runtime while preserving the packaged `file:` / webOS path.
+> Focused regression coverage checks HTTP, HTTPS, and packaged-file classification. This prevents a
+> local or preview browser reproduction session from reporting into the television's Sentry project.
+>
+> What remains open is the browser harness: a seek into an unbuffered region against the real CDN,
+> bandwidth collapse driving real ABR, and the other real-network playback cases below. The previous
+> plan to use that browser harness to prove **A2** Sentry delivery is no longer valid: the gate
+> intentionally disables Sentry in browser sessions, so actual teardown-event delivery remains a
+> television acceptance check under **A2**, not an A18 browser result.
 
 - **Problem or opportunity:** Every open investigation in this roadmap is gated on somebody sitting
   in front of a television at the moment a rare failure happens, then reading it back through a QR
@@ -860,10 +868,11 @@ which now records it.
 - **Concrete evidence:** The app already runs in a browser: `src/utils/enviroment.ts` selects
   `BrowserRouter` when the origin is http, `yarn start` serves it, and until **A4** it was built and
   published on every push to `master`. What was removed was the _public_ deployment, not the
-  capability. Meanwhile **A5** (decode thresholds), **A6** (does the watchdog rescue anything, and
-  why does the CDN answer `HTTP 0` after a seek) and **A11** (cost of always-on diagnostics) have
-  all been open since the review with no data, because each needs a device and a failure at the same
-  time.
+  capability. `isWebRuntime` now makes that distinction directly testable, and browser sessions skip
+  `Sentry.init` while packaged `file:` execution keeps the television telemetry path. Meanwhile
+  **A5** (decode thresholds), **A6** (does the watchdog rescue anything, and why does the CDN answer
+  `HTTP 0` after a seek) and **A11** (cost of always-on diagnostics) still need device evidence; the
+  browser harness can shorten reproduction work but cannot replace those target observations.
 - **Motivation and expected benefit:** The specific scenarios worth scripting are the ones already
   observed on the TV and never reproduced on demand:
   - a segment the CDN refuses — block one fragment URL and confirm the fatal-error budget drains,
@@ -872,28 +881,32 @@ which now records it.
     restart/reload escalation and then the notice;
   - a seek into an unbuffered region, which is the condition under which `HTTP 0` was captured;
   - bandwidth collapse, to watch ABR move quality on its own;
-  - a stall followed by leaving the player, to confirm the `teardown` episode is _delivered_ and not
-    merely queued — the open question left by **A2**.
+  - a stall followed by leaving the player, to exercise the application-side teardown path; actual
+    Sentry delivery remains under **A2** because browser Sentry is deliberately disabled.
 - **Proposed direction:** Local or preview-only, never a permanent public URL: **A4** removed that
-  for a reason and this must not quietly restore it. Gate Sentry initialisation on the webOS runtime
-  first, so a browser session cannot report into the TV's project. Then a small Playwright script
-  per scenario, driving the app with request interception; Chromium and Playwright are already
-  available in the development container. Keep the scripts beside `docs/` as documented procedures,
-  not as CI jobs — they exercise a real backend and a real CDN, which does not belong in CI.
-- **Dependencies and sequencing:** Sentry gating comes first. Nothing else blocks it. Doing it
-  before another TV session would make that session far more productive.
+  for a reason and this must not quietly restore it. The browser Sentry gate is now in place. Next,
+  add a small Playwright script per scenario, driving the app with request interception; Chromium and
+  Playwright are already available in the development container. Keep the scripts beside `docs/` as
+  documented procedures, not as CI jobs — they exercise a real backend and a real CDN, which does
+  not belong in CI.
+- **Dependencies and sequencing:** The Sentry gate prerequisite is complete. Nothing else blocks the
+  browser harness. Doing it before another TV session would make that session far more productive.
 - **Compatibility risks:** The honest limit, and it should be written into the scripts rather than
   discovered later: **a browser is not the television**. The webOS decoder, the panel's frame
   pacing, the CDN's behaviour towards the TV's address and user agent, and Chromium's MSE
   implementation all differ. A scenario that reproduces in a browser proves the _application_ logic
   handles it; one that does not reproduce proves nothing about the TV. Decode-health thresholds
   (**A5**) in particular cannot be validated this way.
-- **Confidence:** code — high that the app runs in a browser. Unknown whether the specific failures
-  reproduce there at all; that is the first thing to find out.
-- **Validation and acceptance criteria:** Each scenario drives the player to a named, observable
-  end state — budget exhausted, notice shown, episode reported — reproducibly, from a documented
-  command. A scenario that only works sometimes is not finished.
-- **Estimated scope:** Medium. Small per scenario once the harness and the Sentry gate exist.
+- **Confidence:** code — high for the browser classification and Sentry wiring; runtime — focused
+  tests cover HTTP/HTTPS versus packaged-file classification. Unknown whether the specific
+  real-network failures reproduce in a browser at all.
+- **Validation and acceptance criteria:** Each browser scenario drives the player to a named,
+  observable application end state — for example budget exhausted, notice shown, ABR level changed,
+  or teardown completed — reproducibly, from a documented command. A scenario that only works
+  sometimes is not finished. The browser gate itself is covered by focused runtime classification
+  tests; actual Sentry delivery remains device evidence under **A2** and is not an A18 browser
+  acceptance criterion.
+- **Estimated scope:** Medium. Small per scenario now that the Sentry gate exists.
 
 ### A20 — Media recovery is a blunt instrument for the errors it is used on
 
