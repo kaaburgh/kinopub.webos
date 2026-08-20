@@ -3,6 +3,7 @@ import { Integrations as TracingIntegrations } from '@sentry/tracing';
 
 import { ApiFailure, apiFailureKey, describeApiFailure, isServerFault, normalizeEndpoint } from 'utils/apiFailures';
 import { APP_VERSION } from 'utils/app';
+import { IS_WEB } from 'utils/enviroment';
 import { EpisodeSink, EpisodeSummary } from 'utils/playbackEpisode';
 
 /**
@@ -12,21 +13,23 @@ import { EpisodeSink, EpisodeSummary } from 'utils/playbackEpisode';
  * reliable path. Sentry covers the more common case: the app or the backend misbehaving while the
  * connection is fine. The two are complementary, not alternatives.
  */
-Sentry.init({
-  release: APP_VERSION,
-  dsn: 'https://627d68f05165b49ebcb52675dc97e3bc@o4511850860576768.ingest.de.sentry.io/4511850884431952',
-  integrations: [new TracingIntegrations.BrowserTracing()],
-  tracesSampleRate: 1.0,
-  // Stream URLs carry access tokens in their query string, and they turn up in breadcrumbs, request
-  // data and error messages alike. Reduce every URL to its hostname before anything leaves the TV —
-  // the same rule the diagnostics overlay follows.
-  beforeSend: scrubEvent,
-  beforeBreadcrumb: scrubBreadcrumb,
-  // The recovery trail is the payload: a stalled episode wants its whole chain of retries and
-  // watchdog actions attached, and the default of 100 leaves room for that once repeated errors
-  // are aggregated rather than breadcrumbed one by one.
-  maxBreadcrumbs: 100,
-});
+if (!IS_WEB) {
+  Sentry.init({
+    release: APP_VERSION,
+    dsn: 'https://627d68f05165b49ebcb52675dc97e3bc@o4511850860576768.ingest.de.sentry.io/4511850884431952',
+    integrations: [new TracingIntegrations.BrowserTracing()],
+    tracesSampleRate: 1.0,
+    // Stream URLs carry access tokens in their query string, and they turn up in breadcrumbs, request
+    // data and error messages alike. Reduce every URL to its hostname before anything leaves the TV —
+    // the same rule the diagnostics overlay follows.
+    beforeSend: scrubEvent,
+    beforeBreadcrumb: scrubBreadcrumb,
+    // The recovery trail is the payload: a stalled episode wants its whole chain of retries and
+    // watchdog actions attached, and the default of 100 leaves room for that once repeated errors
+    // are aggregated rather than breadcrumbed one by one.
+    maxBreadcrumbs: 100,
+  });
+}
 
 /**
  * Ties one playback attempt to everything it reported.
