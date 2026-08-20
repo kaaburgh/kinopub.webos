@@ -1,1 +1,5 @@
-export const IS_WEB = window.location.origin.startsWith('http');
+export function isWebRuntime(origin: string) {
+  return origin.startsWith('http');
+}
+
+export const IS_WEB = isWebRuntime(window.location.origin);
