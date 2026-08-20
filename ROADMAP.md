@@ -756,29 +756,40 @@ which now records it.
 
 ### A10 — Add a render error boundary
 
-- **Status:** Open
+> **Implemented, validation incomplete.** `ErrorBoundary` now wraps `Views` in `App/App.tsx`, catches
+> render/lifecycle failures below the routing surface, reports the original exception through
+> `logException`, and replaces the failed tree with a Russian reload fallback instead of a black
+> screen. Focused regression coverage deliberately throws from a child and verifies fallback
+> rendering, exactly one reporting call, and the reload action. **Still open:** LG-device evidence for
+> remote focus/readability and actual reload recovery, plus confirmation that the real Sentry event is
+> delivered rather than only that the reporting helper was called.
+
+- **Status:** Completed, validation incomplete
 - **Depends on:** None
 - **Priority:** Medium
 - **Category:** Robustness
 - **Origin:** Review §4.12
 - **Problem or opportunity:** A render-time throw unmounts the whole tree and leaves a black screen
   with no route back — on a TV, that means killing the app from the launcher.
-- **Concrete evidence:** `grep -rn "componentDidCatch\|ErrorBoundary"` over `src/` returns nothing.
-  22 views are lazy-loaded (`App/App.tsx:12-33`); only `ChunkLoadError` is handled, by the inline
-  listener at `public/index.html:16-32`. Sentry's default `GlobalHandlers` integration does report the
-  error, so diagnosis works and recovery does not.
+- **Concrete evidence:** `src/components/errorBoundary/errorBoundary.tsx` implements the class
+  boundary and calls `logException` from `componentDidCatch`; `src/App/App.tsx` wraps `Views` with it.
+  `src/components/errorBoundary/errorBoundary.test.tsx` mounts a deliberately throwing child and
+  verifies the fallback, one report, and the reload action.
 - **Motivation and expected benefit:** Converts the worst failure mode the app has into a message
   with a way out.
-- **Proposed direction:** One boundary around `Views` in `App/App.tsx` rendering a Moonstone-styled
-  message with a "go back"/"reload" action, reporting through `logException`. A second, tighter
-  boundary around the player is worth considering so a diagnostics-overlay bug cannot kill playback —
-  the overlay is the newest and most intricate code in the tree.
+- **Implemented direction:** Keep one boundary around `Views`; the fallback uses the existing Button
+  component with focus requested and reloads the page. Event-handler and asynchronous exceptions are
+  deliberately outside the boundary's scope. A tighter player-only boundary remains a possible
+  follow-up only if evidence shows it is useful; it is not part of A10's completed implementation.
 - **Dependencies and sequencing:** None.
 - **Compatibility risks:** Low. Boundaries do not catch errors in event handlers or async code, so
-  this is not a general safety net.
-- **Confidence:** code — high.
-- **Validation and acceptance criteria:** A deliberately throwing view renders the fallback instead of
-  a blank screen, the remote still works, and one Sentry event is recorded.
+  this is not a general safety net. Remote focus and real page reload behaviour remain device-only.
+- **Confidence:** code — high for render/lifecycle containment and the reporting/reload wiring;
+  device — not yet established for focus/readability/reload recovery or Sentry delivery.
+- **Validation and acceptance criteria:** The focused regression test establishes that a throwing
+  child renders the fallback, invokes `logException` once, and can invoke reload. On the LG G5,
+  deliberately trigger a render failure and confirm the fallback is readable, the reload action can
+  be focused/activated with the remote, reload recovers the app, and exactly one Sentry event arrives.
 - **Estimated scope:** Small.
 
 ### A11 — Measure the cost of always-on diagnostics collection
