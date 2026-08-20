@@ -18,30 +18,24 @@ The script launches a persistent Chromium profile under the operating system tem
 
 ## Refuse one fragment and observe terminal failure
 
-`refused-segment.js` leaves normal traffic on the real backend/CDN alone until you arm it. It then selects the next matching non-playlist request on one CDN hostname and refuses that exact URL plus its retries at Playwright's network boundary. The selected URL is held only in memory and is never printed.
+`refused-segment.js` leaves normal traffic on the real backend/CDN alone until you arm it. It selects only a request that matches both the configured CDN hostname and a required non-secret fragment-path discriminator, then refuses that exact URL plus its retries at Playwright's network boundary. The selected URL is held only in memory and is never printed. The discriminator is mandatory so the scenario fails closed instead of accidentally treating a key, subtitle, or unrelated XHR as media-fragment evidence.
 
 1. Start the app with `yarn start`.
-2. From browser developer tools or existing diagnostics, obtain only the hostname serving HLS media. Do not copy a full media URL, query string or token into the command.
+2. From browser developer tools or existing diagnostics, obtain the hostname serving HLS media and a **non-secret path fragment that distinguishes media segments** on that CDN. Do not use a query parameter, signed token, full asset URL, viewing identifier, encryption-key path, or subtitle path as the discriminator.
 3. Run:
 
    ```sh
-   KINO_BROWSER_CDN_HOST=<cdn-hostname> node docs/browser-scenarios/refused-segment.js
+   KINO_BROWSER_CDN_HOST=<cdn-hostname> \
+   KINO_BROWSER_FRAGMENT_PATH_HINT=<non-secret-segment-path-fragment> \
+   node docs/browser-scenarios/refused-segment.js
    ```
 
 4. In the opened browser, sign in if necessary, start normal HLS playback, and wait until video is visibly progressing.
-5. Return to the terminal and press Enter. The next matching CDN fragment becomes the refused target. The script reports only the hostname, retry count and elapsed time.
+5. Return to the terminal and press Enter. The next CDN request matching the required fragment discriminator becomes the refused target. The script reports only the hostname, retry count and elapsed time.
 6. The expected application end state is the existing terminal failure notice with the `Повторить` action. The default observation window is 180 seconds; override it with `KINO_BROWSER_TIMEOUT_MS` when investigating a deliberately longer recovery policy.
 7. Inspect the in-app diagnostics or try the local retry action if useful, then return to the terminal and press Enter to close the browser context.
 
-If the CDN uses extensionless paths and the hostname also serves unrelated fetch/XHR traffic, add a local path discriminator:
-
-```sh
-KINO_BROWSER_CDN_HOST=<cdn-hostname> \
-KINO_BROWSER_FRAGMENT_PATH_HINT=<non-secret-path-fragment> \
-node docs/browser-scenarios/refused-segment.js
-```
-
-The path hint is used only for matching in the local process and is not printed. Do not use query parameters, signed tokens, full asset URLs or viewing identifiers as the hint.
+The path hint is used only for matching in the local process and is not printed. If you cannot identify a non-secret path discriminator that uniquely distinguishes media segments from keys, subtitles, and other CDN requests, **do not run this scenario as refused-segment evidence**; tighten the discriminator first.
 
 ### What this scenario establishes
 

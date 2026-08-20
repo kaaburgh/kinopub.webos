@@ -7,7 +7,7 @@ const readline = require('readline');
 
 const APP_URL = process.env.KINO_BROWSER_URL || 'http://localhost:3000';
 const CDN_HOST = (process.env.KINO_BROWSER_CDN_HOST || '').trim().toLowerCase();
-const PATH_HINT = process.env.KINO_BROWSER_FRAGMENT_PATH_HINT || '';
+const PATH_HINT = (process.env.KINO_BROWSER_FRAGMENT_PATH_HINT || '').trim();
 const TIMEOUT_MS = Number(process.env.KINO_BROWSER_TIMEOUT_MS || 180000);
 const PROFILE_DIR =
   process.env.KINO_BROWSER_PROFILE_DIR || path.join(os.tmpdir(), 'kinopub-webos-playwright-profile');
@@ -44,7 +44,7 @@ function requestMatches(request) {
     return false;
   }
 
-  if (PATH_HINT && !parsed.pathname.includes(PATH_HINT)) {
+  if (!parsed.pathname.includes(PATH_HINT)) {
     return false;
   }
 
@@ -64,6 +64,13 @@ async function loadPlaywright() {
 async function main() {
   if (!CDN_HOST) {
     fail('KINO_BROWSER_CDN_HOST is required. Use only the CDN hostname, never a full media URL.');
+    return;
+  }
+
+  if (!PATH_HINT) {
+    fail(
+      'KINO_BROWSER_FRAGMENT_PATH_HINT is required so the scenario fails closed instead of selecting an unrelated CDN request.',
+    );
     return;
   }
 
@@ -118,7 +125,9 @@ async function main() {
   );
 
   armed = true;
-  console.log('Scenario armed. The next matching non-playlist CDN request becomes the refused target.');
+  console.log(
+    'Scenario armed. The next CDN request matching the required fragment path hint becomes the refused target.',
+  );
 
   try {
     await page.waitForSelector('text=Повторить', { state: 'visible', timeout: TIMEOUT_MS });
