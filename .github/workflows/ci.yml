@@ -68,6 +68,34 @@ jobs:
         env:
           CI: 'true'
 
+  # Temporary PR #54 diagnostic. This job creates only an unreachable Git blob
+  # containing Prettier's exact ROADMAP output; it never updates a branch ref.
+  # Remove this job in the same cleanup commit that consumes the reported blob.
+  format-blob-diagnostic:
+    name: Publish formatted ROADMAP blob diagnostic
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 54
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js and Yarn
+        uses: ./.github/actions/setup-node-yarn
+
+      - name: Format ROADMAP and create unreachable Git blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          yarn prettier ROADMAP.md --write
+          encoded="$(base64 -w0 ROADMAP.md)"
+          sha="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/blobs" \
+            -f content="$encoded" \
+            -f encoding=base64 \
+            --jq .sha)"
+          echo "Formatted ROADMAP Git blob: $sha"
+
   docs:
     name: Docs links
     runs-on: ubuntu-latest
