@@ -102,8 +102,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  prepare-a18-roadmap:
-    name: Prepare A18 roadmap blob diagnostic
+  reconcile-a18-roadmap:
+    name: Reconcile A18 roadmap atomically
     if: github.event_name == 'pull_request' && github.event.pull_request.number == 56
     runs-on: ubuntu-latest
     permissions:
@@ -115,127 +115,16 @@ jobs:
       - name: Setup Node.js and Yarn
         uses: ./.github/actions/setup-node-yarn
 
-      - name: Apply fail-closed A18 reconciliation
+      - name: Prepare formatted A18 roadmap
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('ROADMAP.md')
-          text = path.read_text()
-
-          replacements = [
-              (
-                  """- **Status:** Partially implemented — scripted scenarios, the browser Sentry gate, and the first local
-  refused-segment browser procedure exist; the remaining browser scenarios do not""",
-                  """- **Status:** Partially implemented — scripted scenarios, the browser Sentry gate, and the first two
-  local browser procedures (refused segment and non-fatal stall) exist; the remaining browser scenarios do not""",
-              ),
-              (
-                  """> What remains open is the rest of the browser harness: a non-fatal stall, a seek into an unbuffered
-> region against the real CDN, bandwidth collapse driving real ABR, and the teardown-path case below.""",
-                  """> **The second browser procedure now exists, also without runtime evidence.**
-> `docs/browser-scenarios/nonfatal-stall.js` keeps requests pending at Playwright's routing boundary
-> only when the same explicit CDN-host and mandatory non-secret media-fragment path discriminator
-> match. It opens the existing diagnostics before arming and counts a run as non-fatal-stall evidence
-> only when watchdog restart/reload progression is visible and fatal recovery does not become causal
-> before the terminal notice. The companion Markdown procedure records setup, cleanup, privacy, and
-> the browser-vs-TV evidence boundary. This GitHub-only agent environment has not executed it against
-> the real backend/CDN, so reproducibility remains unestablished.
->
-> What remains open is the rest of the browser harness: a seek into an unbuffered region against the
-> real CDN, bandwidth collapse driving real ABR, and the teardown-path case below.""",
-              ),
-              (
-                  """  `docs/browser-scenarios/refused-segment.js` and its README now define the first local browser
-  procedure, including the mandatory fail-closed fragment discriminator and the privacy boundary;
-  the real-backend/CDN run has not yet been executed.""",
-                  """  `docs/browser-scenarios/refused-segment.js` plus its README define the refused-segment procedure,
-  and `docs/browser-scenarios/nonfatal-stall.js` plus its companion Markdown file define the second
-  local procedure. Both require the mandatory fail-closed fragment discriminator and preserve the
-  privacy boundary; neither real-backend/CDN run has yet been executed.""",
-              ),
-              (
-                  """  - a non-fatal stall — block segments without letting hls.js escalate, and confirm the watchdog's
-    restart/reload escalation and then the notice;""",
-                  """  - a non-fatal stall — the documented procedure now exists; once executed reproducibly it should
-    confirm the watchdog's restart/reload escalation and then the notice without fatal recovery
-    becoming causal first;""",
-              ),
-              (
-                  """  for a reason and this must not quietly restore it. The browser Sentry gate and the first
-  refused-segment procedure are now in place. Execute that procedure before claiming it is
-  reproducible; then add one small Playwright script per remaining scenario, driving the app with
-  request interception.""",
-                  """  for a reason and this must not quietly restore it. The browser Sentry gate and the first two
-  procedures are now in place. Execute those procedures before claiming they are reproducible; then
-  add one small Playwright script per remaining scenario, driving the app with request interception.""",
-              ),
-              (
-                  """- **Confidence:** code — high for the browser classification, Sentry wiring, and the first procedure's
-  fail-closed request selection/privacy rules; runtime — focused tests cover HTTP/HTTPS versus
-  packaged-file classification. The refused-segment real-network procedure itself has not been run,
-  so its runtime reproducibility is unknown; all LG-device behaviour remains device evidence only.""",
-                  """- **Confidence:** code — high for the browser classification, Sentry wiring, and both procedures'
-  fail-closed request selection/privacy rules; runtime — focused tests cover HTTP/HTTPS versus
-  packaged-file classification. Neither real-network browser procedure has been run, so their runtime
-  reproducibility is unknown; all LG-device behaviour remains device evidence only.""",
-              ),
-              (
-                  """  evidence is valid only when the configured non-secret discriminator uniquely selects media
-  fragments rather than keys/subtitles/other CDN requests. A scenario that only works sometimes is
-  not finished. The browser gate itself is covered by focused runtime classification tests; actual""",
-                  """  evidence is valid only when the configured non-secret discriminator uniquely selects media
-  fragments rather than keys/subtitles/other CDN requests. For the non-fatal-stall case, diagnostics
-  must show watchdog restart/reload progression without fatal recovery becoming causal before the
-  terminal notice. A scenario that only works sometimes is not finished. The browser gate itself is
-  covered by focused runtime classification tests; actual""",
-              ),
-              (
-                  """- **Estimated scope:** Medium. Small per remaining scenario now that the Sentry gate and first
-  procedure exist.""",
-                  """- **Estimated scope:** Medium. Small per remaining scenario now that the Sentry gate and first two
-  procedures exist.""",
-              ),
-          ]
-
-          for old, new in replacements:
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f'expected exactly one A18 replacement match, found {count}')
-              text = text.replace(old, new, 1)
-
-          path.write_text(text)
-          PY
-
+          python scripts/a18-roadmap-reconcile-temp.py prepare
           yarn prettier ROADMAP.md --write
           git diff --check -- ROADMAP.md
-          git diff -- ROADMAP.md
 
-      - name: Publish unreachable formatted ROADMAP blob
+      - name: Publish reconciliation commit with compare-and-swap
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          python - <<'PY'
-          import base64
-          import json
-          import os
-          import urllib.request
-          from pathlib import Path
-
-          repo = os.environ['GITHUB_REPOSITORY']
-          token = os.environ['GH_TOKEN']
-          content = base64.b64encode(Path('ROADMAP.md').read_bytes()).decode('ascii')
-          request = urllib.request.Request(
-              f'https://api.github.com/repos/{repo}/git/blobs',
-              data=json.dumps({'content': content, 'encoding': 'base64'}).encode(),
-              headers={
-                  'Accept': 'application/vnd.github+json',
-                  'Authorization': f'Bearer {token}',
-                  'X-GitHub-Api-Version': '2022-11-28',
-              },
-              method='POST',
-          )
-          with urllib.request.urlopen(request) as response:
-              payload = json.load(response)
-          print(f"A18_ROADMAP_BLOB={payload['sha']}")
-          PY
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          ORIGINAL_CI_BLOB: ebac3f45a96c044316c6e68f3f8bfb6f345e5e76
+        run: python scripts/a18-roadmap-reconcile-temp.py publish
