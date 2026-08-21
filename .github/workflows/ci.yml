@@ -31,30 +31,7 @@ jobs:
         run: yarn lint
 
       - name: Prettier
-        id: prettier
-        run: |
-          if yarn format:check; then
-            echo 'needs-format=false' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          yarn prettier ROADMAP.md --write
-          echo 'needs-format=true' >> "$GITHUB_OUTPUT"
-          echo '::group::Prettier ROADMAP diff'
-          git diff -- ROADMAP.md
-          echo '::endgroup::'
-
-      - name: Archive formatted ROADMAP diagnostic
-        if: steps.prettier.outputs.needs-format == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: prettier-roadmap
-          path: ROADMAP.md
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Fail on formatting drift
-        if: steps.prettier.outputs.needs-format == 'true'
-        run: exit 1
+        run: yarn format:check
 
       # `yarn build` type checks as well, but only after a full webpack build.
       # Running tsc separately reports type errors in about a minute.
@@ -67,34 +44,6 @@ jobs:
         run: yarn test --watchAll=false --passWithNoTests
         env:
           CI: 'true'
-
-  # Temporary PR #54 diagnostic. This job creates only an unreachable Git blob
-  # containing Prettier's exact ROADMAP output; it never updates a branch ref.
-  # Remove this job in the same cleanup commit that consumes the reported blob.
-  format-blob-diagnostic:
-    name: Publish formatted ROADMAP blob diagnostic
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 54
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js and Yarn
-        uses: ./.github/actions/setup-node-yarn
-
-      - name: Format ROADMAP and create unreachable Git blob
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          yarn prettier ROADMAP.md --write
-          encoded="$(base64 -w0 ROADMAP.md)"
-          sha="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/git/blobs" \
-            -f content="$encoded" \
-            -f encoding=base64 \
-            --jq .sha)"
-          echo "Formatted ROADMAP Git blob: $sha"
 
   docs:
     name: Docs links

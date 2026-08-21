@@ -853,8 +853,7 @@ which now records it.
 > Focused regression coverage checks HTTP, HTTPS, and packaged-file classification. This prevents a
 > local or preview browser reproduction session from reporting into the television's Sentry project.
 >
-> **The first browser procedure now exists, but has not yet produced runtime evidence.**
-> `docs/browser-scenarios/refused-segment.js` launches Chromium through a locally available
+> **The first browser procedure now exists, but has not yet produced runtime evidence.** > `docs/browser-scenarios/refused-segment.js` launches Chromium through a locally available
 > Playwright installation and leaves ordinary backend/CDN traffic real. After playback is visibly
 > progressing, the operator arms the script; it will select a target only when both an explicit CDN
 > hostname and a mandatory non-secret media-fragment path discriminator match, then abort that exact
