@@ -39,6 +39,10 @@ jobs:
           echo '::group::Prettier ROADMAP diff'
           git diff -- ROADMAP.md
           echo '::endgroup::'
+          echo '::group::Prettier ROADMAP base64'
+          base64 -w0 ROADMAP.md
+          echo
+          echo '::endgroup::'
           exit 1
 
       # `yarn build` type checks as well, but only after a full webpack build.
