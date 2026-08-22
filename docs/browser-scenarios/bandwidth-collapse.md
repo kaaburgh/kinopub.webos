@@ -57,17 +57,17 @@ A run counts as a browser **bandwidth-collapse / ABR downshift** observation onl
 - diagnostics show at least two HLS levels;
 - baseline `currentLevel` is above level 0;
 - after network shaping, diagnostics show a `currentLevel` lower than the baseline;
-- the video advances by at least 2 seconds during the shaped observation window.
+- after the first lower `currentLevel` is observed, the video advances by at least 2 additional seconds while shaping remains active.
 
 If no lower level appears, report that as a negative browser result. Do not increase the shaping severity until a downshift occurs and then present that input as a measured network threshold; this procedure is for reproducibility and application-path inspection, not bandwidth benchmarking.
 
-If a lower level appears but playback does not progress, the script fails the run rather than calling a stalled playback path successful ABR adaptation.
+If a lower level appears but playback does not subsequently progress by the required amount, the script fails the run rather than counting progress that happened before the downshift as successful ABR adaptation.
 
 ## Privacy and evidence limits
 
-The script prints only the local app origin, configured shaping values, level indexes, a coarse bandwidth estimate in kbps when diagnostics provide one, and video progress duration. It does not print or persist media/API URLs, paths, query strings, cookies, tokens, subtitles, title names, viewing identifiers, or request bodies.
+The script prints only the local app origin, configured shaping values, level indexes, a coarse bandwidth estimate in kbps when diagnostics provide one, and post-downshift video progress duration. It does not print or persist media/API URLs, paths, query strings, cookies, tokens, subtitles, title names, viewing identifiers, or request bodies.
 
-A successful run establishes only that Chromium plus the pinned browser hls.js path can react to this synthetic network condition by selecting a lower HLS level while playback continues.
+A successful run establishes only that Chromium plus the pinned browser hls.js path can react to this synthetic network condition by selecting a lower HLS level and then continue playback after that lower level is observed.
 
 It does **not** establish:
 

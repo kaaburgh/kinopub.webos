@@ -144,6 +144,7 @@ async function main() {
   );
 
   let lowestLevel = baselineLevel;
+  let firstDownshiftTime;
   let finalTime = baselineTime;
   const deadline = Date.now() + SLOW_WINDOW_MS;
 
@@ -153,11 +154,15 @@ async function main() {
       const snapshot = await readDiagnostics(page);
       finalTime = await readVideoTime(page);
 
-      if (Number.isFinite(snapshot.currentLevel)) {
+      if (Number.isFinite(snapshot.currentLevel) && snapshot.currentLevel < baselineLevel) {
         lowestLevel = Math.min(lowestLevel, snapshot.currentLevel);
+
+        if (!Number.isFinite(firstDownshiftTime)) {
+          firstDownshiftTime = finalTime;
+        }
       }
 
-      if (lowestLevel < baselineLevel && finalTime - baselineTime >= PROGRESS_SECONDS) {
+      if (Number.isFinite(firstDownshiftTime) && finalTime - firstDownshiftTime >= PROGRESS_SECONDS) {
         break;
       }
     }
@@ -170,22 +175,24 @@ async function main() {
     });
   }
 
-  const progressed = finalTime - baselineTime;
-
-  if (lowestLevel >= baselineLevel) {
+  if (lowestLevel >= baselineLevel || !Number.isFinite(firstDownshiftTime)) {
     fail(`No downward ABR move was observed; baseline=${baselineLevel}, lowest=${lowestLevel}.`);
-  } else if (progressed < PROGRESS_SECONDS) {
-    fail(
-      `A lower level was observed, but playback did not progress enough to count as continued playback (${progressed.toFixed(
-        1,
-      )} s).`,
-    );
   } else {
-    console.log(
-      `Observed downward ABR while playback continued: currentLevel ${baselineLevel} -> ${lowestLevel}; video advanced ${progressed.toFixed(
-        1,
-      )} s.`,
-    );
+    const postDownshiftProgress = finalTime - firstDownshiftTime;
+
+    if (postDownshiftProgress < PROGRESS_SECONDS) {
+      fail(
+        `A lower level was observed, but playback did not progress enough after the downshift to count as continued playback (${postDownshiftProgress.toFixed(
+          1,
+        )} s).`,
+      );
+    } else {
+      console.log(
+        `Observed downward ABR while playback continued: currentLevel ${baselineLevel} -> ${lowestLevel}; video advanced ${postDownshiftProgress.toFixed(
+          1,
+        )} s after the first lower level was observed.`,
+      );
+    }
   }
 
   await waitForEnter(
