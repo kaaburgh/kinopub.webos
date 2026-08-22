@@ -825,8 +825,8 @@ which now records it.
 
 ### A18 — A web build for reproducing playback problems, with scripted scenarios
 
-- **Status:** Partially implemented — scripted scenarios, the browser Sentry gate, and the first three
-  local browser procedures (refused segment, non-fatal stall, and unbuffered seek) exist; the remaining browser scenarios do not
+- **Status:** Partially implemented — scripted scenarios, the browser Sentry gate, and the first four
+  local browser procedures (refused segment, non-fatal stall, unbuffered seek, and bandwidth collapse) exist; the remaining browser scenario does not
 - **Depends on:** None
 - **Priority:** Medium
 - **Category:** Test infrastructure
@@ -882,8 +882,16 @@ which now records it.
 > has not executed it against the real backend/CDN, so reproducibility and the cause of the TV's
 > `HTTP 0` remain unestablished.
 >
-> What remains open is the rest of the browser harness: bandwidth collapse driving real ABR and the
-> teardown-path case below.
+> **The fourth browser procedure now exists, also without runtime evidence.** > `docs/browser-scenarios/bandwidth-collapse.js` keeps a genuine multi-level HLS stream in Auto mode
+> and uses Chromium DevTools Protocol network emulation to shape the browser network path without
+> manufacturing hls.js events, level state, or responses. A run is accepted only when diagnostics
+> show a lower `currentLevel` and the video then advances by at least the configured progress window
+> after that first observed downshift. The configured throughput is synthetic and is not a measured
+> connection threshold. The companion Markdown procedure records setup, cleanup, privacy, and the
+> browser-vs-TV evidence boundary. This GitHub-only agent environment has not executed it against the
+> real backend/CDN, so reproducibility remains unestablished.
+>
+> What remains open is the teardown-path browser case below.
 > The previous plan to use that browser harness to prove **A2** Sentry delivery is no longer valid:
 > the gate intentionally disables Sentry in browser sessions, so actual teardown-event delivery
 > remains a television acceptance check under **A2**, not an A18 browser result.
@@ -901,9 +909,11 @@ which now records it.
   `Sentry.init` while packaged `file:` execution keeps the television telemetry path.
   `docs/browser-scenarios/refused-segment.js` plus its README define the refused-segment procedure,
   `docs/browser-scenarios/nonfatal-stall.js` plus its companion Markdown file define the second local
-  procedure, and `docs/browser-scenarios/unbuffered-seek.js` plus its companion Markdown file define
-  the third. All three require the mandatory fail-closed fragment discriminator and preserve the
-  privacy boundary; none of the real-backend/CDN runs has yet been executed. Meanwhile **A5** (decode thresholds), **A6**
+  procedure, `docs/browser-scenarios/unbuffered-seek.js` plus its companion Markdown file define the
+  third, and `docs/browser-scenarios/bandwidth-collapse.js` plus its companion Markdown file define
+  the fourth. The request-targeting procedures preserve the mandatory fail-closed fragment
+  discriminator and all four preserve the privacy boundary; none of the real-backend/CDN runs has
+  yet been executed. Meanwhile **A5** (decode thresholds), **A6**
   (does the watchdog rescue anything, and why does the CDN answer `HTTP 0` after a seek) and **A11**
   (cost of always-on diagnostics) still need device evidence; the browser harness can shorten
   reproduction work but cannot replace those target observations.
@@ -917,13 +927,15 @@ which now records it.
   - a seek into an unbuffered region — the documented procedure now exists; once executed
     reproducibly it should distinguish actual post-seek playback progress from merely reaching the
     assigned target while recording only bounded matching media-fragment outcomes;
-  - bandwidth collapse, to watch ABR move quality on its own;
+  - bandwidth collapse — the documented procedure now exists; once executed reproducibly it should
+    show a lower HLS level followed by continued playback progress under a synthetically shaped
+    Chromium network path;
   - a stall followed by leaving the player, to exercise the application-side teardown path; actual
     Sentry delivery remains under **A2** because browser Sentry is deliberately disabled.
 - **Proposed direction:** Local or preview-only, never a permanent public URL: **A4** removed that
-  for a reason and this must not quietly restore it. The browser Sentry gate and the first three
+  for a reason and this must not quietly restore it. The browser Sentry gate and the first four
   procedures are now in place. Execute those procedures before claiming they are reproducible; then
-  add one small Playwright script per remaining scenario, driving the app with request interception. Keep the scripts beside `docs/` as documented procedures, not as CI jobs —
+  add one small Playwright script for the remaining teardown scenario. Keep the scripts beside `docs/` as documented procedures, not as CI jobs —
   they exercise a real backend and a real CDN, which does not belong in CI.
 - **Dependencies and sequencing:** The Sentry gate prerequisite is complete. Nothing else blocks the
   browser harness. Doing it before another TV session would make that session far more productive.
@@ -933,10 +945,10 @@ which now records it.
   implementation all differ. A scenario that reproduces in a browser proves the _application_ logic
   handles it; one that does not reproduce proves nothing about the TV. Decode-health thresholds
   (**A5**) in particular cannot be validated this way.
-- **Confidence:** code — high for the browser classification, Sentry wiring, and all three procedures'
-  fail-closed request selection/privacy rules; runtime — focused tests cover HTTP/HTTPS versus
-  packaged-file classification. None of the real-network browser procedures has been run, so their
-  runtime reproducibility is unknown; all LG-device behaviour remains device evidence only.
+- **Confidence:** code — high for the browser classification, Sentry wiring, and all four procedures'
+  evidence/privacy rules; runtime — focused tests cover HTTP/HTTPS versus packaged-file
+  classification. None of the real-network browser procedures has been run, so their runtime
+  reproducibility is unknown; all LG-device behaviour remains device evidence only.
 - **Validation and acceptance criteria:** Each browser scenario drives the player to a named,
   observable application end state — for example budget exhausted, notice shown, ABR level changed,
   or teardown completed — reproducibly, from a documented command. For the refused-segment case,
@@ -945,13 +957,16 @@ which now records it.
   must show watchdog restart/reload progression without fatal recovery becoming causal before the
   terminal notice. For the unbuffered-seek case, the chosen target must be outside the live buffered
   ranges, a matching media-fragment request must be observed after the seek, and `resumed` is valid
-  only after observable playback progression beyond the reached seek target. A scenario that only
-  works sometimes is not finished. The browser gate itself is
+  only after observable playback progression beyond the reached seek target. For bandwidth collapse,
+  diagnostics must start in Auto mode with multiple levels and a level above zero; success requires a
+  lower `currentLevel` followed by observable playback progression after that downshift. The shaped
+  throughput is an input to the experiment, not a measured threshold. A scenario that only works
+  sometimes is not finished. The browser gate itself is
   covered by focused runtime classification tests; actual
   Sentry delivery remains device evidence under **A2** and is not an A18 browser acceptance
   criterion.
-- **Estimated scope:** Medium. Small per remaining scenario now that the Sentry gate and first three
-  procedures exist.
+- **Estimated scope:** Medium. Small for the remaining teardown scenario now that the Sentry gate and
+  first four procedures exist.
 
 ### A20 — Media recovery is a blunt instrument for the errors it is used on
 
