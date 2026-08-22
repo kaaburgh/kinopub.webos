@@ -7,8 +7,6 @@ on:
       - master
   workflow_dispatch:
 
-# Feature branches here are pushed repeatedly while a change is being iterated
-# on; only the newest commit of a branch or pull request needs a green run.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -23,23 +21,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js and Yarn
         uses: ./.github/actions/setup-node-yarn
-
       - name: ESLint
         run: yarn lint
-
       - name: Prettier
         run: yarn format:check
-
-      # `yarn build` type checks as well, but only after a full webpack build.
-      # Running tsc separately reports type errors in about a minute.
       - name: TypeScript
         run: yarn typecheck
-
-      # The project currently has no test files; the step is here so that added
-      # tests run without a workflow change, and passes until then.
       - name: Tests
         run: yarn test --watchAll=false --passWithNoTests
         env:
@@ -51,9 +40,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # The link check is plain Node.js with no imports from the project, so it
-      # runs on the runner's Node.js without installing dependencies.
       - name: Check relative links in Markdown
         run: node ./scripts/check-docs-links.js
 
@@ -63,26 +49,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js and Yarn
         uses: ./.github/actions/setup-node-yarn
-
       - name: Build app
         run: yarn build
-
-      # The target browser is from around 2016 (`.browserslistrc`: chrome 35). A single arrow
-      # function reaching it means the bundle fails to parse and the screen stays black, with no
-      # error anyone can see. CRA transpiles dependencies as well as app code, but nothing announces
-      # it when that stops holding -- so the output is parsed as ES5 rather than assumed to be.
       - name: Check the bundle is ES5
         run: yarn check:es5
-
       - name: Package app
         run: yarn package
-
-      # `scripts/package.js` derives IPK names from the `package.json` version,
-      # and `docs/build-and-install.md` tells people to install exactly this
-      # file. Fail loudly here rather than publishing a differently named asset.
       - name: Check the installable package exists
         run: |
           version="$(node -p "require('./package.json').version")"
@@ -93,7 +67,6 @@ jobs:
             exit 1
           fi
           echo "Built $package ($(du -h "$package" | cut -f1))"
-
       - name: Archive packages
         uses: actions/upload-artifact@v4
         with:
@@ -101,3 +74,27 @@ jobs:
           path: out/*.ipk
           if-no-files-found: error
           retention-days: 14
+
+  reconcile-a18-roadmap:
+    name: Reconcile A18 roadmap atomically
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 60
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js and Yarn
+        uses: ./.github/actions/setup-node-yarn
+      - name: Prepare formatted A18 roadmap
+        run: |
+          python scripts/a18-roadmap-reconcile-temp.py prepare
+          yarn prettier ROADMAP.md --write
+          git diff --check -- ROADMAP.md
+      - name: Publish reconciliation commit with compare-and-swap
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          ORIGINAL_CI_BLOB: ebac3f45a96c044316c6e68f3f8bfb6f345e5e76
+        run: python scripts/a18-roadmap-reconcile-temp.py publish
