@@ -101,30 +101,3 @@ jobs:
           path: out/*.ipk
           if-no-files-found: error
           retention-days: 14
-
-  reconcile-a18-roadmap:
-    name: Reconcile A18 roadmap atomically
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 58
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js and Yarn
-        uses: ./.github/actions/setup-node-yarn
-
-      - name: Prepare formatted A18 roadmap
-        run: |
-          python scripts/a18-roadmap-reconcile-temp.py prepare
-          yarn prettier ROADMAP.md --write
-          git diff --check -- ROADMAP.md
-
-      - name: Publish reconciliation commit with compare-and-swap
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-          ORIGINAL_CI_BLOB: ebac3f45a96c044316c6e68f3f8bfb6f345e5e76
-        run: python scripts/a18-roadmap-reconcile-temp.py publish
