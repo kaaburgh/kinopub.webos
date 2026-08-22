@@ -103,6 +103,48 @@ async function chooseUnbufferedTarget(page) {
   }, MIN_SEEK_SECONDS);
 }
 
+async function waitForPlaybackProgress(page, seekTarget, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+
+  await page.waitForFunction(
+    (target) => {
+      const video = document.querySelector('video');
+      return Boolean(
+        video &&
+          !video.paused &&
+          !video.seeking &&
+          video.readyState >= 2 &&
+          Math.abs(video.currentTime - target) <= 5,
+      );
+    },
+    seekTarget,
+    { timeout: timeoutMs },
+  );
+
+  const progressStart = await page.evaluate(() => {
+    const video = document.querySelector('video');
+    if (!video) throw new Error('VIDEO_DISAPPEARED');
+    return Number(video.currentTime);
+  });
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) throw new Error('PLAYBACK_PROGRESS_TIMEOUT');
+
+  await page.waitForFunction(
+    (startTime) => {
+      const video = document.querySelector('video');
+      return Boolean(
+        video &&
+          !video.paused &&
+          !video.seeking &&
+          video.readyState >= 2 &&
+          video.currentTime >= startTime + 0.75,
+      );
+    },
+    progressStart,
+    { timeout: remainingMs },
+  );
+}
+
 async function main() {
   if (!CDN_HOST) {
     fail('KINO_BROWSER_CDN_HOST is required. Use only the CDN hostname, never a full media URL.');
@@ -195,21 +237,7 @@ async function main() {
   let outcome = 'timeout';
   try {
     outcome = await Promise.race([
-      page
-        .waitForFunction(
-          (seekTarget) => {
-            const video = document.querySelector('video');
-            return Boolean(
-              video &&
-                !video.paused &&
-                video.readyState >= 2 &&
-                Math.abs(video.currentTime - seekTarget) <= 5,
-            );
-          },
-          target.target,
-          { timeout: TIMEOUT_MS },
-        )
-        .then(() => 'resumed'),
+      waitForPlaybackProgress(page, target.target, TIMEOUT_MS).then(() => 'resumed'),
       page
         .waitForSelector('text=Повторить', { state: 'visible', timeout: TIMEOUT_MS })
         .then(() => 'terminal-failure'),
