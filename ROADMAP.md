@@ -825,8 +825,8 @@ which now records it.
 
 ### A18 — A web build for reproducing playback problems, with scripted scenarios
 
-- **Status:** Partially implemented — scripted scenarios, the browser Sentry gate, and the first four
-  local browser procedures (refused segment, non-fatal stall, unbuffered seek, and bandwidth collapse) exist; the remaining browser scenario does not
+- **Status:** Implemented, validation incomplete — scripted scenarios, the browser Sentry gate, and all five
+  local browser procedures (refused segment, non-fatal stall, unbuffered seek, bandwidth collapse, and teardown) exist; real-backend browser validation remains open
 - **Depends on:** None
 - **Priority:** Medium
 - **Category:** Test infrastructure
@@ -891,8 +891,16 @@ which now records it.
 > browser-vs-TV evidence boundary. This GitHub-only agent environment has not executed it against the
 > real backend/CDN, so reproducibility remains unestablished.
 >
-> What remains open is the teardown-path browser case below.
-> The previous plan to use that browser harness to prove **A2** Sentry delivery is no longer valid:
+> **The fifth browser procedure now exists, also without runtime evidence.** > `docs/browser-scenarios/teardown.js` keeps matching media-fragment requests pending behind the same
+> explicit CDN-host and mandatory non-secret fragment-path discriminator until the existing terminal
+> failure notice appears. It then sends one Escape/Back through the application's normal key path and
+> accepts success only when the route leaves the player and the `<video>` element is unmounted. The
+> companion Markdown procedure records setup, cleanup, privacy, and the browser-vs-TV evidence
+> boundary. This GitHub-only agent environment has not executed it against the real backend/CDN, so
+> reproducibility remains unestablished.
+>
+> All planned browser procedures now exist; what remains open is executing them reproducibly against
+> the real backend/CDN. The previous plan to use that browser harness to prove **A2** Sentry delivery is no longer valid:
 > the gate intentionally disables Sentry in browser sessions, so actual teardown-event delivery
 > remains a television acceptance check under **A2**, not an A18 browser result.
 
@@ -910,10 +918,10 @@ which now records it.
   `docs/browser-scenarios/refused-segment.js` plus its README define the refused-segment procedure,
   `docs/browser-scenarios/nonfatal-stall.js` plus its companion Markdown file define the second local
   procedure, `docs/browser-scenarios/unbuffered-seek.js` plus its companion Markdown file define the
-  third, and `docs/browser-scenarios/bandwidth-collapse.js` plus its companion Markdown file define
-  the fourth. The request-targeting procedures preserve the mandatory fail-closed fragment
-  discriminator and all four preserve the privacy boundary; none of the real-backend/CDN runs has
-  yet been executed. Meanwhile **A5** (decode thresholds), **A6**
+  third, `docs/browser-scenarios/bandwidth-collapse.js` plus its companion Markdown file define the
+  fourth, and `docs/browser-scenarios/teardown.js` plus its companion Markdown file define the fifth.
+  The request-targeting procedures preserve the mandatory fail-closed fragment discriminator and all
+  five preserve the privacy boundary; none of the real-backend/CDN runs has yet been executed. Meanwhile **A5** (decode thresholds), **A6**
   (does the watchdog rescue anything, and why does the CDN answer `HTTP 0` after a seek) and **A11**
   (cost of always-on diagnostics) still need device evidence; the browser harness can shorten
   reproduction work but cannot replace those target observations.
@@ -930,12 +938,14 @@ which now records it.
   - bandwidth collapse — the documented procedure now exists; once executed reproducibly it should
     show a lower HLS level followed by continued playback progress under a synthetically shaped
     Chromium network path;
-  - a stall followed by leaving the player, to exercise the application-side teardown path; actual
-    Sentry delivery remains under **A2** because browser Sentry is deliberately disabled.
+  - a stall followed by leaving the player — the documented procedure now exists; once executed
+    reproducibly it should exercise the application-side teardown path through normal Back handling,
+    route change, and video unmount. Actual Sentry delivery remains under **A2** because browser
+    Sentry is deliberately disabled.
 - **Proposed direction:** Local or preview-only, never a permanent public URL: **A4** removed that
-  for a reason and this must not quietly restore it. The browser Sentry gate and the first four
-  procedures are now in place. Execute those procedures before claiming they are reproducible; then
-  add one small Playwright script for the remaining teardown scenario. Keep the scripts beside `docs/` as documented procedures, not as CI jobs —
+  for a reason and this must not quietly restore it. The browser Sentry gate and all five planned
+  procedures are now in place. Execute those procedures before claiming they are reproducible. Keep
+  the scripts beside `docs/` as documented procedures, not as CI jobs —
   they exercise a real backend and a real CDN, which does not belong in CI.
 - **Dependencies and sequencing:** The Sentry gate prerequisite is complete. Nothing else blocks the
   browser harness. Doing it before another TV session would make that session far more productive.
@@ -945,7 +955,7 @@ which now records it.
   implementation all differ. A scenario that reproduces in a browser proves the _application_ logic
   handles it; one that does not reproduce proves nothing about the TV. Decode-health thresholds
   (**A5**) in particular cannot be validated this way.
-- **Confidence:** code — high for the browser classification, Sentry wiring, and all four procedures'
+- **Confidence:** code — high for the browser classification, Sentry wiring, and all five procedures'
   evidence/privacy rules; runtime — focused tests cover HTTP/HTTPS versus packaged-file
   classification. None of the real-network browser procedures has been run, so their runtime
   reproducibility is unknown; all LG-device behaviour remains device evidence only.
@@ -960,13 +970,15 @@ which now records it.
   only after observable playback progression beyond the reached seek target. For bandwidth collapse,
   diagnostics must start in Auto mode with multiple levels and a level above zero; success requires a
   lower `currentLevel` followed by observable playback progression after that downshift. The shaped
-  throughput is an input to the experiment, not a measured threshold. A scenario that only works
-  sometimes is not finished. The browser gate itself is
+  throughput is an input to the experiment, not a measured threshold. For teardown, at least one
+  matching media-fragment request must be held until the terminal failure notice appears; success
+  then requires normal Back handling to leave the player route and unmount the `<video>` element.
+  Actual Sentry delivery remains device evidence under **A2**. A scenario that only works sometimes
+  is not finished. The browser gate itself is
   covered by focused runtime classification tests; actual
   Sentry delivery remains device evidence under **A2** and is not an A18 browser acceptance
   criterion.
-- **Estimated scope:** Medium. Small for the remaining teardown scenario now that the Sentry gate and
-  first four procedures exist.
+- **Estimated scope:** Medium. Procedure implementation is complete; real-backend browser validation remains.
 
 ### A20 — Media recovery is a blunt instrument for the errors it is used on
 
