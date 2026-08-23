@@ -39,6 +39,7 @@ jobs:
               raise SystemExit('new declaration already present unexpectedly')
           path.write_text(text.replace(old, new), encoding='utf-8')
           PY
+          yarn prettier src/components/media/media.new.tsx --write
           yarn format:check
           yarn typecheck
           yarn lint

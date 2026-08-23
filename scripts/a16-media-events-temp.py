@@ -43,16 +43,15 @@ def ref_sha():
 
 
 text = SOURCE.read_text(encoding='utf-8')
-if text.count(OLD) != 1:
-    raise SystemExit(f'expected exactly one old MediaEvents declaration, found {text.count(OLD)}')
-if NEW in text:
-    raise SystemExit('new MediaEvents declaration already present unexpectedly')
-SOURCE.write_text(text.replace(OLD, NEW), encoding='utf-8')
+if OLD in text:
+    raise SystemExit('old MediaEvents declaration still present after preparation')
+if text.count(NEW) != 1:
+    raise SystemExit(f'expected exactly one corrected MediaEvents declaration, found {text.count(NEW)}')
 
 if ref_sha() != EXPECTED:
     raise SystemExit('branch head changed before publication')
 
-source_blob = request('POST', f'/repos/{REPO}/git/blobs', {'content': SOURCE.read_text(encoding='utf-8'), 'encoding': 'utf-8'})['sha']
+source_blob = request('POST', f'/repos/{REPO}/git/blobs', {'content': text, 'encoding': 'utf-8'})['sha']
 base_commit = request('GET', f'/repos/{REPO}/git/commits/{EXPECTED}')
 base_tree = base_commit['tree']['sha']
 new_tree = request(
