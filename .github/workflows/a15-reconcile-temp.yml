@@ -1,0 +1,28 @@
+name: A15 reconciliation helper
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile-a15:
+    if: github.head_ref == 'agent-a15-truth-spec'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '14.21.3'
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - name: Reconcile specification and roadmap atomically
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/a15-reconcile-temp.py
