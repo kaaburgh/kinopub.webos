@@ -1250,7 +1250,7 @@ which now records it.
 
 ### A16 — Retire dead code and small inherited defects
 
-- **Status:** Open
+- **Status:** Partially implemented
 - **Depends on:** None
 - **Priority:** Low
 - **Category:** Maintenance
@@ -1265,9 +1265,10 @@ which now records it.
     (`video.tsx:221`), so `tsc` sees neither half of the mismatch.
   - `player.tsx:194-203` appends `#subtitle-opacity-style` to `document.head` and never removes it —
     the one lifecycle asymmetry in otherwise careful cleanup code.
-  - `type MediaEvents = keyof typeof MEDIA_EVENTS` (`media.new.tsx:1075`) resolves to array members,
-    not event names; `typeof MEDIA_EVENTS[number]` was intended, so the `Partial<Record<…>>` below
-    checks nothing. Inherited; no runtime effect.
+  - **Completed substep:** `MediaEvents` now derives from `typeof MEDIA_EVENTS[number]`, and the
+    generated wrapper map uses `React.ReactEventHandler<HTMLVideoElement>` instead of generic
+    `Function`; the local `@ts-expect-error` is gone. This restores type coverage for the live event
+    props without intending a runtime behaviour change.
   - `recoveryTimeoutId` is a single slot (`media.new.tsx:330`, `:448`), so a second fatal error inside
     the backoff window orphans the first timer and the cleanup at `:546-548` clears only the last.
     The `hlsRef.current === hls` guard at `:450` keeps this benign — the worst case is a duplicated
@@ -1276,16 +1277,19 @@ which now records it.
     the real id. Inherited, documented around rather than decided on.
 - **Motivation and expected benefit:** Removes traps for whoever reads this next, and closes a real
   hole in type coverage on the player's props.
-- **Proposed direction:** Point `video.tsx` at `components/media` and delete `media.tsx`; then find
-  out what the `@ts-expect-error` on `:221` was hiding, since it may stop being needed or may reveal a
-  genuine mismatch. Track and clear the retry timers as a set. Remove the style element on unmount.
-  Fix `MediaEvents`. Decide about the extra app ids deliberately.
+- **Implemented progress / remaining direction:** The `MediaEvents` type-coverage substep is
+  complete. Point `video.tsx` at `components/media` and delete `media.tsx`; then find out what the
+  `@ts-expect-error` on `:221` was hiding, since it may stop being needed or may reveal a genuine
+  mismatch. Track and clear the retry timers as a set. Remove the style element on unmount. Decide
+  about the extra app ids deliberately.
 - **Dependencies and sequencing:** None, but do not bundle with a behavioural change — the value here
   is that the diff is boring.
 - **Confidence:** code — high, except the concurrency premise for the timer, which is reasoned from
   hls.js's controller structure rather than observed (medium).
-- **Validation and acceptance criteria:** `yarn typecheck`, `yarn lint`, `yarn test` and `yarn build`
-  all pass; playback and quality switching unchanged on the TV.
+- **Validation and acceptance criteria:** The completed `MediaEvents` substep has green typecheck,
+  lint, test and build CI. Remaining A16 cleanup must preserve those checks; playback and quality
+  switching unchanged on the TV remains device acceptance where a remaining cleanup can affect
+  playback behaviour.
 - **Estimated scope:** Small.
 
 ### A17 — Find out whether upstream has moved, and whether older webOS still works
