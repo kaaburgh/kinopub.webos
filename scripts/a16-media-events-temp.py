@@ -14,7 +14,7 @@ SOURCE = Path('src/components/media/media.new.tsx')
 WORKFLOW_PATH = '.github/workflows/a16-media-events-temp.yml'
 SCRIPT_PATH = 'scripts/a16-media-events-temp.py'
 OLD_TYPE = 'type MediaEvents = keyof typeof MEDIA_EVENTS;'
-NEW_TYPE = 'type MediaEvents = (typeof MEDIA_EVENTS)[number];'
+NEW_TYPE = 'type MediaEvents = typeof MEDIA_EVENTS[number];'
 HANDLER_TYPE = 'type MediaEventHandler = React.ReactEventHandler<HTMLVideoElement>;'
 OLD_REDUCER = 'MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, Function>>>'
 NEW_REDUCER = 'MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, MediaEventHandler>>>'
