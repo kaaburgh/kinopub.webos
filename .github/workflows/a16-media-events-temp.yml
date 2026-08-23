@@ -1,0 +1,55 @@
+name: A16 media event type helper
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  apply-a16-media-event-type:
+    if: github.head_ref == 'agent-a16-media-events-type'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 14.21.3
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Prepare exact type correction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/media/media.new.tsx')
+          old = 'type MediaEvents = keyof typeof MEDIA_EVENTS;'
+          new = 'type MediaEvents = (typeof MEDIA_EVENTS)[number];'
+          text = path.read_text(encoding='utf-8')
+          if text.count(old) != 1:
+              raise SystemExit(f'expected exactly one old declaration, found {text.count(old)}')
+          if new in text:
+              raise SystemExit('new declaration already present unexpectedly')
+          path.write_text(text.replace(old, new), encoding='utf-8')
+          PY
+          yarn format:check
+          yarn typecheck
+          yarn lint
+          CI=true yarn test --watchAll=false
+          yarn build
+          git diff --check
+          git diff -- src/components/media/media.new.tsx
+
+      - name: Publish self-cleaning implementation commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/a16-media-events-temp.py
