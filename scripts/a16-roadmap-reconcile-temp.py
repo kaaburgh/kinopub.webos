@@ -6,10 +6,6 @@ import sys
 import urllib.request
 from pathlib import Path
 
-REPO = os.environ['GITHUB_REPOSITORY']
-TOKEN = os.environ['GH_TOKEN']
-EXPECTED_HEAD = os.environ['EXPECTED_HEAD']
-BRANCH = os.environ['HEAD_BRANCH']
 ROADMAP = Path('ROADMAP.md')
 WORKFLOW_PATH = '.github/workflows/a16-roadmap-reconcile-temp.yml'
 SCRIPT_PATH = 'scripts/a16-roadmap-reconcile-temp.py'
@@ -65,10 +61,12 @@ def prepare():
 
 
 def api(method, path, payload=None):
-    url = f'https://api.github.com/repos/{REPO}{path}'
+    repo = os.environ['GITHUB_REPOSITORY']
+    token = os.environ['GH_TOKEN']
+    url = f'https://api.github.com/repos/{repo}{path}'
     data = None if payload is None else json.dumps(payload).encode()
     req = urllib.request.Request(url, data=data, method=method)
-    req.add_header('Authorization', f'Bearer {TOKEN}')
+    req.add_header('Authorization', f'Bearer {token}')
     req.add_header('Accept', 'application/vnd.github+json')
     req.add_header('X-GitHub-Api-Version', '2022-11-28')
     if data is not None:
@@ -78,10 +76,13 @@ def api(method, path, payload=None):
 
 
 def ref_sha():
-    return api('GET', f'/git/ref/heads/{BRANCH}')['object']['sha']
+    branch = os.environ['HEAD_BRANCH']
+    return api('GET', f'/git/ref/heads/{branch}')['object']['sha']
 
 
 def publish():
+    expected_head = os.environ['EXPECTED_HEAD']
+    branch = os.environ['HEAD_BRANCH']
     text = ROADMAP.read_text()
     _, _, block = a16_block(text)
     required = [
@@ -96,7 +97,7 @@ def publish():
     if '`type MediaEvents = keyof typeof MEDIA_EVENTS`' in block:
         raise SystemExit('stale MediaEvents roadmap evidence remains')
 
-    if ref_sha() != EXPECTED_HEAD:
+    if ref_sha() != expected_head:
         raise SystemExit('branch head changed before publication')
 
     roadmap_bytes = ROADMAP.read_bytes()
@@ -104,7 +105,7 @@ def publish():
         'content': base64.b64encode(roadmap_bytes).decode(),
         'encoding': 'base64',
     })['sha']
-    head_commit = api('GET', f'/git/commits/{EXPECTED_HEAD}')
+    head_commit = api('GET', f'/git/commits/{expected_head}')
     tree = api('POST', '/git/trees', {
         'base_tree': head_commit['tree']['sha'],
         'tree': [
@@ -116,12 +117,12 @@ def publish():
     commit = api('POST', '/git/commits', {
         'message': 'docs: reconcile A16 media event type progress',
         'tree': tree,
-        'parents': [EXPECTED_HEAD],
+        'parents': [expected_head],
     })['sha']
 
-    if ref_sha() != EXPECTED_HEAD:
+    if ref_sha() != expected_head:
         raise SystemExit('branch head changed immediately before ref update')
-    api('PATCH', f'/git/refs/heads/{BRANCH}', {'sha': commit, 'force': False})
+    api('PATCH', f'/git/refs/heads/{branch}', {'sha': commit, 'force': False})
     print(f'published cleanup commit {commit}')
     print(f'roadmap blob {blob}')
 
