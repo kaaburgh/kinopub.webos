@@ -13,8 +13,11 @@ API = 'https://api.github.com'
 SOURCE = Path('src/components/media/media.new.tsx')
 WORKFLOW_PATH = '.github/workflows/a16-media-events-temp.yml'
 SCRIPT_PATH = 'scripts/a16-media-events-temp.py'
-OLD = 'type MediaEvents = keyof typeof MEDIA_EVENTS;'
-NEW = 'type MediaEvents = (typeof MEDIA_EVENTS)[number];'
+OLD_TYPE = 'type MediaEvents = keyof typeof MEDIA_EVENTS;'
+NEW_TYPE = 'type MediaEvents = (typeof MEDIA_EVENTS)[number];'
+HANDLER_TYPE = 'type MediaEventHandler = React.ReactEventHandler<HTMLVideoElement>;'
+OLD_REDUCER = 'MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, Function>>>'
+NEW_REDUCER = 'MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, MediaEventHandler>>>'
 
 
 def request(method, path, payload=None):
@@ -43,10 +46,18 @@ def ref_sha():
 
 
 text = SOURCE.read_text(encoding='utf-8')
-if OLD in text:
+if OLD_TYPE in text:
     raise SystemExit('old MediaEvents declaration still present after preparation')
-if text.count(NEW) != 1:
-    raise SystemExit(f'expected exactly one corrected MediaEvents declaration, found {text.count(NEW)}')
+if text.count(NEW_TYPE) != 1:
+    raise SystemExit(f'expected exactly one corrected MediaEvents declaration, found {text.count(NEW_TYPE)}')
+if text.count(HANDLER_TYPE) != 1:
+    raise SystemExit(f'expected exactly one MediaEventHandler declaration, found {text.count(HANDLER_TYPE)}')
+if OLD_REDUCER in text:
+    raise SystemExit('old Function-typed event reducer still present after preparation')
+if text.count(NEW_REDUCER) != 1:
+    raise SystemExit(f'expected exactly one typed event reducer, found {text.count(NEW_REDUCER)}')
+if '// @ts-expect-error' in text[text.find('const eventProps'):]:
+    raise SystemExit('eventProps still contains the obsolete @ts-expect-error')
 
 if ref_sha() != EXPECTED:
     raise SystemExit('branch head changed before publication')

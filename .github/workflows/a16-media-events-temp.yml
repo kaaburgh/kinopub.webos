@@ -30,14 +30,40 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path = Path('src/components/media/media.new.tsx')
-          old = 'type MediaEvents = keyof typeof MEDIA_EVENTS;'
-          new = 'type MediaEvents = (typeof MEDIA_EVENTS)[number];'
+          old_type = 'type MediaEvents = keyof typeof MEDIA_EVENTS;'
+          new_type = '''type MediaEvents = (typeof MEDIA_EVENTS)[number];
+          type MediaEventHandler = React.ReactEventHandler<HTMLVideoElement>;'''
+          old_handlers = '''MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, Function>>>(
+                    (result, event) => ({
+                      ...result,
+                      [event]: (...args: any[]) => {
+                        handleUpdate();
+                        // @ts-expect-error
+                        props[event]?.(...args);
+                      },
+                    }),
+                    {},
+                  )'''
+          new_handlers = '''MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, MediaEventHandler>>>(
+                    (result, event) => ({
+                      ...result,
+                      [event]: (syntheticEvent: React.SyntheticEvent<HTMLVideoElement>) => {
+                        handleUpdate();
+                        const handler = props[event] as MediaEventHandler | undefined;
+                        handler?.(syntheticEvent);
+                      },
+                    }),
+                    {},
+                  )'''
           text = path.read_text(encoding='utf-8')
-          if text.count(old) != 1:
-              raise SystemExit(f'expected exactly one old declaration, found {text.count(old)}')
-          if new in text:
-              raise SystemExit('new declaration already present unexpectedly')
-          path.write_text(text.replace(old, new), encoding='utf-8')
+          if text.count(old_type) != 1:
+              raise SystemExit(f'expected exactly one old type declaration, found {text.count(old_type)}')
+          if text.count(old_handlers) != 1:
+              raise SystemExit(f'expected exactly one old handler reducer, found {text.count(old_handlers)}')
+          if new_type in text or new_handlers in text:
+              raise SystemExit('corrected media-event typing already present unexpectedly')
+          text = text.replace(old_type, new_type).replace(old_handlers, new_handlers)
+          path.write_text(text, encoding='utf-8')
           PY
           yarn prettier src/components/media/media.new.tsx --write
           yarn format:check
