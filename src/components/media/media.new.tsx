@@ -497,7 +497,7 @@ function useVideoPlayer({
   }, [autoPlay]);
 
   useEffect(() => {
-    let recoveryTimeoutId: NodeJS.Timeout | undefined;
+    const recoveryTimeoutIds = new Set<NodeJS.Timeout>();
     let mediaRecoveryAttempts = 0;
     // Guards the audio-track re-selection below to one attempt per healthy stretch of playback.
     let audioTrackReselected = false;
@@ -643,12 +643,14 @@ function useVideoPlayer({
 
             episodeRef.current.noteAction('fatal-retry', Date.now(), { attempt: attempts, limit: RECOVERY_MAX_NETWORK_ATTEMPTS, delay });
             fatalRetryPendingRef.current = true;
-            recoveryTimeoutId = setTimeout(() => {
+            const recoveryTimeoutId = setTimeout(() => {
+              recoveryTimeoutIds.delete(recoveryTimeoutId);
               fatalRetryPendingRef.current = false;
               if (hlsRef.current === hls) {
                 hls.startLoad();
               }
             }, delay);
+            recoveryTimeoutIds.add(recoveryTimeoutId);
 
             return;
           }
@@ -850,11 +852,10 @@ function useVideoPlayer({
     }
 
     return () => {
-      // Cleared before destroy() so a pending retry can never call startLoad()
+      // Cleared before destroy() so pending retries can never call startLoad()
       // on a torn-down instance.
-      if (recoveryTimeoutId) {
-        clearTimeout(recoveryTimeoutId);
-      }
+      recoveryTimeoutIds.forEach((timeoutId) => clearTimeout(timeoutId));
+      recoveryTimeoutIds.clear();
       fatalRetryPendingRef.current = false;
       if (videoRef.current) {
         if (videoRef.current.currentTime > 0) {
