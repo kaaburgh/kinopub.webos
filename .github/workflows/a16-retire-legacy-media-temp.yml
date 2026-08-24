@@ -1,0 +1,54 @@
+name: A16 retire legacy media helper
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-publish:
+    if: github.event.pull_request.head.ref == 'agent-a16-retire-legacy-media'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Node.js and Yarn
+        uses: ./.github/actions/setup-node-yarn
+
+      - name: Prepare bounded A16 change
+        run: python3 scripts/a16-retire-legacy-media-temp.py prepare
+
+      - name: Format changed source
+        run: yarn prettier src/views/video/video.tsx --write
+
+      - name: Format check
+        run: yarn format:check
+
+      - name: TypeScript
+        run: yarn typecheck
+
+      - name: ESLint
+        run: yarn lint
+
+      - name: Tests
+        run: yarn test --watchAll=false --passWithNoTests
+        env:
+          CI: 'true'
+
+      - name: Build
+        run: yarn build
+
+      - name: Diff check
+        run: git diff --check
+
+      - name: Publish self-cleaned durable commit
+        run: python3 scripts/a16-retire-legacy-media-temp.py publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
