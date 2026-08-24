@@ -1485,7 +1485,8 @@ const MEDIA_EVENTS = [
   'onWaiting',
 ] as const;
 
-type MediaEvents = keyof typeof MEDIA_EVENTS;
+type MediaEvents = typeof MEDIA_EVENTS[number];
+type MediaEventHandler = React.ReactEventHandler<HTMLVideoElement>;
 
 export type MediaProps = OwnProps & React.HTMLAttributes<HTMLVideoElement>;
 
@@ -1513,13 +1514,13 @@ const Media = React.forwardRef<MediaRef, MediaProps>(
     }, [onUpdate]);
     const eventProps = useMemo(
       () =>
-        MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, Function>>>(
+        MEDIA_EVENTS.reduce<Partial<Record<MediaEvents, MediaEventHandler>>>(
           (result, event) => ({
             ...result,
-            [event]: (...args: any[]) => {
+            [event]: (syntheticEvent: React.SyntheticEvent<HTMLVideoElement>) => {
               handleUpdate();
-              // @ts-expect-error
-              props[event]?.(...args);
+              const handler = props[event] as MediaEventHandler | undefined;
+              handler?.(syntheticEvent);
             },
           }),
           {},
