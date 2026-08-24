@@ -1258,11 +1258,10 @@ which now records it.
 - **Problem or opportunity:** A batch of small items, each individually harmless, that together make
   the code harder to trust — notably a dead module that is still a type source for live code.
 - **Concrete evidence:**
-  - `src/components/media/media.tsx` (218 lines, the legacy Enact class implementation) is reachable
-    from nothing — `index.ts` re-exports `media.new` only — except `views/video/video.tsx:6`, which
-    imports the type `SourceTrack` from it. That type differs from the live one (no `number`, no
-    `default`, no `type`) and types `onSourceChange` three lines above a `// @ts-expect-error`
-    (`video.tsx:221`), so `tsc` sees neither half of the mismatch.
+  - **Completed substep:** `src/views/video/video.tsx` now imports `SourceTrack` through the live
+    `components/media` barrel, and the dead legacy `src/components/media/media.tsx` implementation
+    has been removed. The nearby `onAudioChange` `@ts-expect-error` was left untouched because this
+    bounded cleanup produced no evidence that it belongs to the legacy type source.
   - `player.tsx:194-203` appends `#subtitle-opacity-style` to `document.head` and never removes it —
     the one lifecycle asymmetry in otherwise careful cleanup code.
   - **Completed substep:** `MediaEvents` now derives from `typeof MEDIA_EVENTS[number]`, and the
@@ -1277,19 +1276,20 @@ which now records it.
     the real id. Inherited, documented around rather than decided on.
 - **Motivation and expected benefit:** Removes traps for whoever reads this next, and closes a real
   hole in type coverage on the player's props.
-- **Implemented progress / remaining direction:** The `MediaEvents` type-coverage substep is
-  complete. Point `video.tsx` at `components/media` and delete `media.tsx`; then find out what the
-  `@ts-expect-error` on `:221` was hiding, since it may stop being needed or may reveal a genuine
-  mismatch. Track and clear the retry timers as a set. Remove the style element on unmount. Decide
-  about the extra app ids deliberately.
+- **Implemented progress / remaining direction:** Two bounded type-source substeps are complete:
+  `MediaEvents` now covers the live event-name values, and `video.tsx` now takes `SourceTrack` from
+  the live `components/media` barrel with the dead legacy `media.tsx` removed. The nearby
+  `onAudioChange` `@ts-expect-error` remains intentionally untouched pending separate evidence. Track
+  and clear the retry timers as a set. Remove the style element on unmount. Decide about the extra
+  app ids deliberately.
 - **Dependencies and sequencing:** None, but do not bundle with a behavioural change — the value here
   is that the diff is boring.
 - **Confidence:** code — high, except the concurrency premise for the timer, which is reasoned from
   hls.js's controller structure rather than observed (medium).
-- **Validation and acceptance criteria:** The completed `MediaEvents` substep has green typecheck,
-  lint, test and build CI. Remaining A16 cleanup must preserve those checks; playback and quality
-  switching unchanged on the TV remains device acceptance where a remaining cleanup can affect
-  playback behaviour.
+- **Validation and acceptance criteria:** The completed `MediaEvents` and legacy-media type-source
+  substeps have green typecheck, lint, test and build CI. Remaining A16 cleanup must preserve those
+  checks; playback and quality switching unchanged on the TV remains device acceptance where a
+  remaining cleanup can affect playback behaviour.
 - **Estimated scope:** Small.
 
 ### A17 — Find out whether upstream has moved, and whether older webOS still works
