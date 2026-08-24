@@ -645,7 +645,7 @@ function useVideoPlayer({
             fatalRetryPendingRef.current = true;
             const recoveryTimeoutId = setTimeout(() => {
               recoveryTimeoutIds.delete(recoveryTimeoutId);
-              fatalRetryPendingRef.current = false;
+              fatalRetryPendingRef.current = recoveryTimeoutIds.size > 0;
               if (hlsRef.current === hls) {
                 hls.startLoad();
               }
