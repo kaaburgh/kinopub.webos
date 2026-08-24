@@ -1221,7 +1221,7 @@ which now records it.
 
 ### A15 — Truth up the specification documents
 
-- **Status:** Open
+- **Status:** Completed, validation incomplete
 - **Depends on:** A4
 - **Priority:** Low
 - **Category:** Documentation
@@ -1237,11 +1237,11 @@ which now records it.
   `:430-433`. Separately, `:264-266` still argues the Sentry DSN "belongs to the upstream project",
   which was the reasoning for replacing it — done at `logging.ts:16`.
 - **Motivation and expected benefit:** Cheap, and restores the documents' credibility.
-- **Proposed direction:** Replace the five-item list with the episode model plus the one standalone
-  issue; rewrite the QR rationale to say the export exists because the _network_ is what fails during
-  a stall — which is still true and is the stronger argument — rather than because the DSN belongs to
-  someone else. Sweep for other statements the recent commits invalidated while there.
-- **Dependencies and sequencing:** None. Should follow **A4**, whose decisions the spec should record.
+- **Implemented direction:** Replaced the stale standalone-condition list with the recovery-episode
+  model plus `decode-health-severe`, rewrote the QR rationale around network independence rather than
+  the obsolete upstream-DSN premise, and corrected the adjacent report-volume rule so it distinguishes
+  session-scoped standalone issues, endpoint-scoped API failures, and recovery episodes.
+- **Dependencies and sequencing:** None. Followed **A4**, whose telemetry decisions the spec now records.
 - **Compatibility risks:** None.
 - **Confidence:** code — high; both contradictions are visible side by side.
 - **Validation and acceptance criteria:** No claim in the spec contradicts the code or another part of

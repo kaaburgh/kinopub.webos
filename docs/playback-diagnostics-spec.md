@@ -276,13 +276,12 @@ Diagnostic state must be isolated, bounded, and discarded when playback unmounts
 ## Capture Export
 
 The overlay can serialize its current state into a QR code so a report can leave the TV without a
-network round trip. That constraint drives the whole
-design: the failure under investigation is a network stall, so any transport that uploads from the
-app is unavailable exactly when the capture matters. Scanning with a phone works regardless.
+network round trip. The failure under investigation is a network stall, so any transport that uploads
+from the app can be unavailable exactly when the capture matters. Scanning with a phone works
+regardless.
 
-Sending to the Sentry DSN already present in `src/utils/logging.ts` is not an option either — it
-belongs to the upstream project, so the data would go to a third party and stay invisible to whoever
-is debugging this fork.
+Sentry complements rather than replaces this path: it can report while connectivity still works,
+but the QR export remains locally retrievable when the failing condition is the network itself.
 
 ### Entry point
 
@@ -476,14 +475,10 @@ Playback failures are reported to Sentry as well as shown on screen. The QR capt
 reliable path for a stall, because the network is exactly what breaks then; Sentry covers the more
 common case of the app or the backend misbehaving while the connection is fine.
 
-Reported conditions, all of them states the player could not resolve on its own:
-
-- `fatal-network-recovery-exhausted`
-- `fatal-media-recovery-exhausted`
-- `fatal-unrecoverable`
-- `stall-watchdog-exhausted`
-- persistent non-fatal playback wedge (episode trigger `persistent-wedge`)
-- `decode-health-severe`
+Failures the player tries to recover from are reported as recovery episodes rather than as
+standalone playback issues. Episode triggers cover fatal recovery, watchdog recovery, and persistent
+non-fatal wedges; one event is emitted when the episode concludes as recovered or abandoned. The
+only standalone playback issue is `decode-health-severe`, which is deliberately not an episode.
 
 ### Recovery episodes
 
@@ -611,10 +606,10 @@ Nothing in the app depends on the removed code.
 
 Two rules keep this useful:
 
-- **One report per issue per playback session.** The failure this project has been chasing produces
-  a few hundred errors a minute; reporting each would bury the signal and burn the quota in one
-  evening. The interesting fact is that a session hit a wall, not how many times it bounced off it.
-  The guard resets when a new source loads.
+- **Bound repeated reports at the right scope.** Standalone playback issues are reported once per
+  playback session, API failures once per endpoint/kind/session, and recoverable playback failures
+  once per recovery episode. The failure this project has been chasing can produce a few hundred
+  errors a minute; reporting each would bury the signal and burn the quota in one evening.
 - **Hostnames only.** Stream URLs carry access tokens and appear in messages, breadcrumbs and
   request data alike, so `beforeSend` and `beforeBreadcrumb` reduce every URL in an outgoing event
   to its hostname — the same rule the overlay follows.
