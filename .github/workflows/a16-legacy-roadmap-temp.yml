@@ -1,0 +1,45 @@
+name: A16 legacy media roadmap reconciliation helper
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile-a16-roadmap:
+    if: github.event.pull_request.number == 68
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 14.21.3
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Prepare A16 roadmap reconciliation
+        run: python3 scripts/a16-legacy-roadmap-temp.py prepare
+
+      - name: Format and validate documentation
+        run: |
+          yarn prettier ROADMAP.md --write
+          yarn format:check
+          yarn check:docs
+          git diff --check
+
+      - name: Publish self-cleaned A16 roadmap commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: python3 scripts/a16-legacy-roadmap-temp.py publish
