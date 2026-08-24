@@ -2,8 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useHistory, useLocation } from 'react-router-dom';
 
 import { ItemDetails, Season, Streaming, Video, WatchingStatus } from 'api';
-import { AudioTrack, SubtitleTrack } from 'components/media';
-import { SourceTrack } from 'components/media/media';
+import { AudioTrack, SourceTrack, SubtitleTrack } from 'components/media';
 import Player, { PlayerProps } from 'components/player';
 import Seo from 'components/seo';
 import useApi from 'hooks/useApi';
