@@ -1,0 +1,49 @@
+name: A16 retry timer cleanup helper
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  publish-a16-retry-timer-cleanup:
+    if: github.event.pull_request.number == 70
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 14.21.3
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      - name: Prepare retry timer cleanup
+        run: python3 scripts/a16-retry-timers-temp.py prepare
+
+      - name: Format and validate
+        run: |
+          yarn prettier src/components/media/media.new.tsx --write
+          yarn format:check
+          yarn typecheck
+          yarn lint
+          CI=true yarn test --watchAll=false
+          yarn build
+          yarn check:es5
+          git diff --check
+
+      - name: Publish self-cleaned retry timer commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: python3 scripts/a16-retry-timers-temp.py publish
