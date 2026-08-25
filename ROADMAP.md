@@ -1250,7 +1250,7 @@ which now records it.
 
 ### A16 — Retire dead code and small inherited defects
 
-- **Status:** Partially implemented
+- **Status:** Completed, validation incomplete
 - **Depends on:** None
 - **Priority:** Low
 - **Category:** Maintenance
@@ -1274,26 +1274,28 @@ which now records it.
     callback removes its own timer, `fatalRetryPendingRef` stays true while another retry remains
     pending, and media-effect cleanup clears every remaining retry timeout before HLS destruction.
     Retry counts, backoff delays, and hls.js recovery policy are unchanged.
-  - `scripts/package.js:12` builds IPKs under `netflix`, `amazon`, `ivi`, `youtube`, `ui30` as well as
-    the real id. Inherited, documented around rather than decided on.
+  - **Completed substep:** packaging now uses only the canonical `package.json` application id. The
+    inherited `netflix`, `amazon`, `ivi`, `youtube`, and `ui30` package aliases were removed; the
+    normal `out/kinopub.webos_v<version>.ipk` artifact and packaging flow are otherwise unchanged.
 - **Motivation and expected benefit:** Removes traps for whoever reads this next, and closes a real
   hole in type coverage on the player's props.
-- **Implemented progress / remaining direction:** Four bounded maintenance substeps are complete:
-  `MediaEvents` now covers the live event-name values; `video.tsx` now takes `SourceTrack` from the
-  live `components/media` barrel with the dead legacy `media.tsx` removed; fatal-network retry timers
-  are tracked and cleaned up as a set without changing retry policy; and the subtitle-opacity style
-  now has symmetric effect cleanup without changing opacity semantics. The nearby `onAudioChange`
-  `@ts-expect-error` remains intentionally untouched pending separate evidence. Decide about the extra
-  app ids deliberately.
+- **Implemented progress / remaining direction:** All five bounded maintenance decisions in this item
+  are complete: `MediaEvents` covers the live event-name values; `video.tsx` takes `SourceTrack` from
+  the live `components/media` barrel with the dead legacy `media.tsx` removed; fatal-network retry
+  timers are tracked and cleaned up as a set without changing retry policy; the subtitle-opacity style
+  has symmetric effect cleanup without changing opacity semantics; and packaging now uses only the
+  canonical application id. The nearby `onAudioChange` `@ts-expect-error` remains intentionally
+  untouched because none of these bounded cleanups produced evidence that it is part of A16.
 - **Dependencies and sequencing:** None, but do not bundle with a behavioural change — the value here
   is that the diff is boring.
 - **Confidence:** code — high, except the concurrency premise for the timer, which is reasoned from
   hls.js's controller structure rather than observed (medium).
 - **Validation and acceptance criteria:** The completed `MediaEvents`, legacy-media type-source,
   retry-timer, and subtitle-style lifecycle substeps have green typecheck, lint, test and build CI;
-  the retry-timer and subtitle-style changes also passed ES5 validation. Remaining A16 cleanup must
-  preserve those checks; playback and quality switching unchanged on the TV remains device acceptance
-  where a remaining cleanup can affect playback behaviour.
+  the retry-timer and subtitle-style changes also passed ES5 validation. The canonical-package-id
+  substep has green CI packaging evidence that the normal `out/kinopub.webos_v<version>.ipk` is still
+  produced. Installing and launching that package on a television remains **A14** device evidence, not
+  something this maintenance item can verify in CI.
 - **Estimated scope:** Small.
 
 ### A17 — Find out whether upstream has moved, and whether older webOS still works
