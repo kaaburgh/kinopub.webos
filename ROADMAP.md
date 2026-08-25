@@ -1262,8 +1262,10 @@ which now records it.
     `components/media` barrel, and the dead legacy `src/components/media/media.tsx` implementation
     has been removed. The nearby `onAudioChange` `@ts-expect-error` was left untouched because this
     bounded cleanup produced no evidence that it belongs to the legacy type source.
-  - `player.tsx:194-203` appends `#subtitle-opacity-style` to `document.head` and never removes it —
-    the one lifecycle asymmetry in otherwise careful cleanup code.
+  - **Completed substep:** the subtitle-opacity effect still owns the same global
+    `#subtitle-opacity-style` element and `video::cue` opacity rule, but now removes that style during
+    effect cleanup so repeated player mounts do not leave global style state behind. Opacity values and
+    storage behaviour are unchanged.
   - **Completed substep:** `MediaEvents` now derives from `typeof MEDIA_EVENTS[number]`, and the
     generated wrapper map uses `React.ReactEventHandler<HTMLVideoElement>` instead of generic
     `Function`; the local `@ts-expect-error` is gone. This restores type coverage for the live event
@@ -1276,21 +1278,22 @@ which now records it.
     the real id. Inherited, documented around rather than decided on.
 - **Motivation and expected benefit:** Removes traps for whoever reads this next, and closes a real
   hole in type coverage on the player's props.
-- **Implemented progress / remaining direction:** Three bounded maintenance substeps are complete:
+- **Implemented progress / remaining direction:** Four bounded maintenance substeps are complete:
   `MediaEvents` now covers the live event-name values; `video.tsx` now takes `SourceTrack` from the
-  live `components/media` barrel with the dead legacy `media.tsx` removed; and fatal-network retry
-  timers are tracked and cleaned up as a set without changing retry policy. The nearby
-  `onAudioChange` `@ts-expect-error` remains intentionally untouched pending separate evidence. Remove
-  the style element on unmount. Decide about the extra app ids deliberately.
+  live `components/media` barrel with the dead legacy `media.tsx` removed; fatal-network retry timers
+  are tracked and cleaned up as a set without changing retry policy; and the subtitle-opacity style
+  now has symmetric effect cleanup without changing opacity semantics. The nearby `onAudioChange`
+  `@ts-expect-error` remains intentionally untouched pending separate evidence. Decide about the extra
+  app ids deliberately.
 - **Dependencies and sequencing:** None, but do not bundle with a behavioural change — the value here
   is that the diff is boring.
 - **Confidence:** code — high, except the concurrency premise for the timer, which is reasoned from
   hls.js's controller structure rather than observed (medium).
-- **Validation and acceptance criteria:** The completed `MediaEvents`, legacy-media type-source, and
-  retry-timer substeps have green typecheck, lint, test and build CI; the retry-timer change also
-  passed ES5 validation. Remaining A16 cleanup must preserve those checks; playback and quality
-  switching unchanged on the TV remains device acceptance where a remaining cleanup can affect
-  playback behaviour.
+- **Validation and acceptance criteria:** The completed `MediaEvents`, legacy-media type-source,
+  retry-timer, and subtitle-style lifecycle substeps have green typecheck, lint, test and build CI;
+  the retry-timer and subtitle-style changes also passed ES5 validation. Remaining A16 cleanup must
+  preserve those checks; playback and quality switching unchanged on the TV remains device acceptance
+  where a remaining cleanup can affect playback behaviour.
 - **Estimated scope:** Small.
 
 ### A17 — Find out whether upstream has moved, and whether older webOS still works
