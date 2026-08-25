@@ -1300,33 +1300,43 @@ which now records it.
 
 ### A17 — Find out whether upstream has moved, and whether older webOS still works
 
-- **Status:** Investigation first
+- **Status:** Investigation first — upstream checked; older-webOS device validation remains open
 - **Depends on:** None
 - **Priority:** Low
 - **Category:** Compatibility
 - **Origin:** Review §3, §7.5, §7.6
-- **Problem or opportunity:** Two unknowns that could each invalidate assumptions cheaply. This fork
-  has no upstream remote, so nobody knows whether `alexeyeryshev/kinopub.webos` or
-  `adascal/kinopub.webos` has shipped fixes since the fork point. And `README.md` claims webOS v3+
-  while the fork has added CSS that predates neither target nor firmware has been checked against.
-- **Concrete evidence:** `git remote -v` shows only `origin`; the last inherited commit is `58bd3ea`
-  (2026-03-07). `README.md` states "webOS v3+". ES built-ins are safe — `src/polyfills.ts` imports all
-  of `core-js` and `src/index.tsx:1` loads it first — and every DOM API the fork added is behind a
-  `typeof` guard. But `gap` on **flex** containers (`playbackDiagnostics.tsx:932`, `:978`, `:1061`)
-  is Chrome 84 and cannot be polyfilled: on a webOS 4 panel (Chrome 53) the diagnostics sections
-  would sit flush against each other rather than fail outright.
-- **Motivation and expected benefit:** Adding an upstream remote is a one-line change that turns an
-  unknown into a diff. The webOS claim is either true or the README is wrong, and both are cheap to
-  settle.
-- **Proposed direction:** Add an `upstream` remote and fetch it; review `58bd3ea..upstream/master`
-  for anything worth taking. Separately, either test on an older panel or narrow the README's claim
-  to what has actually been run.
-- **Dependencies and sequencing:** None.
-- **Compatibility risks:** None from looking.
-- **Confidence:** code — high for the CSS analysis. Everything else: unknown by construction.
-- **Validation and acceptance criteria:** A written statement of what upstream has changed and what
-  is worth taking, and a README claim matching what has been verified.
-- **Estimated scope:** Small.
+- **Problem or opportunity:** The two unknowns have now been separated. Upstream movement can be
+  answered from repository history; older-webOS compatibility still needs target-device evidence.
+- **Concrete evidence:** GitHub fork metadata identifies `alexeyeryshev/kinopub.webos` as this fork's
+  direct parent and `ValeraGin/kinopub.webos` as the source repository. The direct parent's `master`
+  advanced from inherited commit `58bd3ea0327c53247317de1f7f81795ca1ae21e6` to
+  `e887c9966227a490e038a6a1efd56a559ffb3d32` with two commits: `6c632f9` adds default device settings
+  plus substantial streaming/audio-selection changes, and `e887c99` bumps the version to 1.4.0.
+  The source repository remains at `1d18773dcb18da59b7e32a700cc1f7de539669dd` from 2021, and
+  `adascal/kinopub.webos` currently resolves 404 on GitHub. The parent's behavioral change includes
+  disabling hls.js by default for its 4K/native-player path and changing audio-selection/device-setting
+  behavior, so it conflicts with assumptions this fork has since made explicit and tested around HLS
+  diagnostics, quality selection, and recovery; it is not a safe wholesale cherry-pick. Independently,
+  `README.md` used to claim `webOS v3+`, while this fork's collected device evidence is from the LG G5.
+  Older generations have not been verified. ES built-ins are covered by `core-js` and added DOM APIs
+  are guarded, but flex `gap` in diagnostics remains a known presentation degradation on older engines.
+- **Motivation and expected benefit:** The upstream half is no longer an unknown, and the public support
+  claim now distinguishes tested reality from inherited compatibility assumptions.
+- **Implemented direction:** Do not import the parent's August 2026 playback/default-settings commit
+  wholesale. Treat any individual idea from it as a separate change requiring reconciliation with the
+  fork's current playback architecture and evidence. README now states the tested LG G5 baseline and
+  leaves older webOS generations explicitly unverified instead of claiming `webOS v3+`.
+- **Dependencies and sequencing:** Upstream investigation is complete. Older-webOS compatibility is
+  device-only and can be tested independently when suitable hardware is available.
+- **Compatibility risks:** None from this documentation/investigation step. Narrowing the claim avoids
+  promising support that has not been exercised.
+- **Confidence:** code/repository history — high for upstream state and CSS analysis; device — LG G5
+  only, with older webOS generations still unverified.
+- **Validation and acceptance criteria:** Upstream movement and the adoption decision are recorded.
+  The README claim matches verified device evidence. To finish the remaining compatibility question,
+  install and exercise the current build on an older webOS panel and record the result; until then no
+  older-generation support claim should be restored.
+- **Estimated scope:** Upstream investigation complete; one older-panel viewing/install session remains.
 
 ---
 
