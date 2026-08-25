@@ -1,0 +1,39 @@
+name: A17 upstream compatibility reconciliation helper
+
+on:
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  reconcile:
+    if: github.event.pull_request.head.ref == 'agent-a17-upstream-compat'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - name: Prepare A17 reconciliation
+        run: python3 scripts/a17-upstream-compat-temp.py
+      - name: Format and validate docs
+        run: |
+          yarn prettier README.md ROADMAP.md --write
+          yarn format:check
+          yarn check:docs
+          git diff --check
+      - name: Publish self-cleaned A17 result
+        env:
+          MODE: publish
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: python3 scripts/a17-upstream-compat-temp.py
