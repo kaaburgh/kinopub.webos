@@ -1,0 +1,50 @@
+name: A16 package id roadmap reconciliation helper
+
+on:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    if: github.event.pull_request.number == 74
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Prepare documentation reconciliation
+        run: python3 scripts/a16-package-roadmap-temp.py prepare
+
+      - name: Format changed documents
+        run: yarn prettier docs/build-and-install.md ROADMAP.md --write
+
+      - name: Validate formatting
+        run: yarn format:check
+
+      - name: Validate documentation
+        run: yarn check:docs
+
+      - name: Validate diff whitespace
+        run: git diff --check
+
+      - name: Publish self-cleaned reconciliation commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: python3 scripts/a16-package-roadmap-temp.py publish
