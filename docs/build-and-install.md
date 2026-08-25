@@ -63,13 +63,13 @@ yarn build
 yarn package
 ```
 
-The commands produce the web application in `build/` and IPK packages in `out/`. The package for this application is:
+The commands produce the web application in `build/` and the IPK package in `out/`. The package for this application is:
 
 ```text
 out/kinopub.webos_v<version>.ipk
 ```
 
-For the current `package.json`, for example, the file is `out/kinopub.webos_v1.3.0.ipk`. `yarn package` also creates packages with the test IDs used by the existing project tooling; install the package whose name starts with `kinopub.webos_v` and has no additional suffix.
+For the current `package.json`, for example, the file is `out/kinopub.webos_v1.3.0.ipk`. `yarn package` packages only this canonical application id.
 
 The same build and package commands are used by the repository's GitHub Actions workflows. For code changes, `yarn lint` is a useful local check before building; the build and package steps are the checks that produce the TV artifact.
 
