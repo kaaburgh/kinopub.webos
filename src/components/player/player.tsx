@@ -241,6 +241,12 @@ const Player: React.FC<PlayerProps> = ({
       document.head.appendChild(styleEl);
     }
     styleEl.textContent = `video::cue { opacity: ${subtitleOpacity ?? 1}; }`;
+
+    return () => {
+      if (styleEl?.parentNode) {
+        styleEl.parentNode.removeChild(styleEl);
+      }
+    };
   }, [subtitleOpacity]);
 
   useEffect(() => {
