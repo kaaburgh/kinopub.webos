@@ -33,9 +33,9 @@ Notes:
 - The type check runs separately from the build because `tsc --noEmit` reports
   type errors in about a minute, while `yarn build` only reaches them after a
   full webpack build.
-- The test step uses `--passWithNoTests`, so added tests start running without a
-  workflow change. It covers the unit tests under `src/utils/` and the playback
-  scenario tests described in
+- The test step runs the discovered test suites without `--passWithNoTests`, so
+  CI fails if the repository unexpectedly stops discovering tests. It covers the
+  unit tests under `src/utils/` and the playback scenario tests described in
   [Playback scenario tests](./playback-scenario-tests.md), which mount the real
   player over a scripted CDN. Those run under fake timers, so several minutes of
   stream time cost well under a second of CI time.

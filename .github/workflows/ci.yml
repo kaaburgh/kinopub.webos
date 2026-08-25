@@ -38,10 +38,8 @@ jobs:
       - name: TypeScript
         run: yarn typecheck
 
-      # The project currently has no test files; the step is here so that added
-      # tests run without a workflow change, and passes until then.
       - name: Tests
-        run: yarn test --watchAll=false --passWithNoTests
+        run: yarn test --watchAll=false
         env:
           CI: 'true'
 
