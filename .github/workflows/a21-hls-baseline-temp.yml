@@ -96,6 +96,24 @@ jobs:
               'persistent-wedge latest HLS error',
           )
 
+          replace_once(
+              """    expect(harness.episodes).toHaveLength(1);\n    expect(harness.episodes[0]).toMatchObject({\n""",
+              """    const wedgeEpisodes = harness.episodes.filter((episode) => episode.trigger === 'persistent-wedge');\n    expect(wedgeEpisodes).toHaveLength(1);\n    expect(harness.episodes.filter((episode) => episode.outcome === 'abandoned')).toHaveLength(1);\n    const wedgeEpisode = wedgeEpisodes[0];\n    expect(wedgeEpisode).toMatchObject({\n""",
+              'persistent-wedge episode selection',
+          )
+
+          replace_once(
+              "    expect(harness.episodes[0].context).not.toHaveProperty('currentTime');",
+              "    expect(wedgeEpisode.context).not.toHaveProperty('currentTime');",
+              'persistent-wedge currentTime privacy assertion',
+          )
+
+          replace_once(
+              "    expect(harness.episodes[0].context).not.toHaveProperty('bufferedRanges');",
+              "    expect(wedgeEpisode.context).not.toHaveProperty('bufferedRanges');",
+              'persistent-wedge bufferedRanges privacy assertion',
+          )
+
           path.write_text(text)
           PY
           yarn prettier src/components/media/media.scenarios.test.tsx --write

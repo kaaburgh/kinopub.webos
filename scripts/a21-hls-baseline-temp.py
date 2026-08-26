@@ -65,6 +65,9 @@ def main():
     required = [
         "it('escalates a hanging edge itself rather than waiting for hls.js to call it fatal'",
         "harness.hlsErrors.every((error) => error.reason === 'networkError / fragLoadTimeOut')",
+        "const wedgeEpisodes = harness.episodes.filter((episode) => episode.trigger === 'persistent-wedge');",
+        "harness.episodes.filter((episode) => episode.outcome === 'abandoned')",
+        'const wedgeEpisode = wedgeEpisodes[0];',
         'fatalCount: harness.hlsErrors.filter((error) => error.fatal).length',
         'reason: harness.hlsErrors[harness.hlsErrors.length - 1].reason',
         'fatal: harness.hlsErrors[harness.hlsErrors.length - 1].fatal',
@@ -74,7 +77,7 @@ def main():
             raise RuntimeError(f'expected exactly one baseline-compatible scenario marker: {marker!r}')
     forbidden = [
         'New in 1.6+: hls.js notices the frozen picture itself',
-        "expect(harness.hlsErrors.some((error) => error.fatal)).toBe(false);",
+        '// hls.js notices, but only says so: none of this is fatal, and it never refetches a playlist.',
     ]
     for marker in forbidden:
         if marker in scenarios:
