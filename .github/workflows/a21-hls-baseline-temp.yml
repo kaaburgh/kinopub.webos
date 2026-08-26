@@ -1,0 +1,64 @@
+name: A21 hls baseline helper
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  restore-hls-baseline:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Use Node.js 14
+        uses: actions/setup-node@v4
+        with:
+          node-version: '14'
+          cache: yarn
+
+      - name: Install current dependencies
+        run: yarn install --frozen-lockfile --ignore-scripts
+
+      - name: Prepare hls.js 1.0.10 baseline
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path('package.json')
+          package = json.loads(path.read_text())
+          current = package['dependencies'].get('hls.js')
+          if current != '1.6.15':
+              raise SystemExit(f'expected hls.js 1.6.15 before rollback, found {current!r}')
+          package['dependencies']['hls.js'] = '1.0.10'
+          path.write_text(json.dumps(package, indent=2) + '\n')
+          PY
+          yarn install --ignore-scripts
+          yarn prettier package.json --write
+          yarn install --frozen-lockfile --ignore-scripts
+
+      - name: Validate rollback
+        run: |
+          yarn format:check
+          yarn typecheck
+          yarn lint
+          CI=true yarn test --watchAll=false
+          yarn test --watchAll=false --testPathPattern=media.scenarios
+          yarn build
+          yarn check:es5
+          git diff --check
+
+      - name: Publish validated durable source tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+        run: python3 scripts/a21-hls-baseline-temp.py
