@@ -3,7 +3,7 @@ import { Integrations as TracingIntegrations } from '@sentry/tracing';
 
 import { ApiFailure, apiFailureKey, describeApiFailure, isServerFault, normalizeEndpoint } from 'utils/apiFailures';
 import { APP_VERSION } from 'utils/app';
-import { IS_WEB } from 'utils/enviroment';
+import { IS_WEB, shouldInitSentry } from 'utils/enviroment';
 import { EpisodeSink, EpisodeSummary } from 'utils/playbackEpisode';
 
 /**
@@ -13,10 +13,12 @@ import { EpisodeSink, EpisodeSummary } from 'utils/playbackEpisode';
  * reliable path. Sentry covers the more common case: the app or the backend misbehaving while the
  * connection is fine. The two are complementary, not alternatives.
  */
-if (!IS_WEB) {
+const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
+
+if (shouldInitSentry(IS_WEB, SENTRY_DSN)) {
   Sentry.init({
     release: APP_VERSION,
-    dsn: 'https://627d68f05165b49ebcb52675dc97e3bc@o4511850860576768.ingest.de.sentry.io/4511850884431952',
+    dsn: SENTRY_DSN,
     integrations: [new TracingIntegrations.BrowserTracing()],
     tracesSampleRate: 1.0,
     // Stream URLs carry access tokens in their query string, and they turn up in breadcrumbs, request
