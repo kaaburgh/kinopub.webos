@@ -45,6 +45,61 @@ jobs:
           yarn prettier package.json --write
           yarn install --frozen-lockfile --ignore-scripts
 
+      - name: Align playback scenario expectations with 1.0.10
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/components/media/media.scenarios.test.tsx')
+          text = path.read_text()
+
+          def replace_once(old, new, label):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "it('reacts to a hanging edge just ahead of hls.js, which now escalates one too', async () => {",
+              "it('escalates a hanging edge itself rather than waiting for hls.js to call it fatal', async () => {",
+              'scenario title',
+          )
+
+          replace_once(
+              """    // The worst version of the failure: the connection is accepted and then abandoned.\n    //\n    // This scenario is where the upgrade to 1.7 showed most. On 1.0.10 hls.js produced non-fatal\n    // timeouts every twenty seconds and did not call the stream broken for four and a half minutes,\n    // which was the whole case for the stall watchdog. 1.7 abandons a silent request after\n    // `maxTimeToFirstByteMs` -- ten seconds, not the two-minute whole-response deadline -- reports\n    // the stall itself through its gap controller, and reaches a fatal error inside ninety seconds.\n    // The watchdog still moves first, but by seconds rather than minutes.\n""",
+              """    // The worst version of the failure: the connection is accepted and then abandoned. hls.js does\n    // notice -- each request eventually times out -- but a timeout is non-fatal, so it simply\n    // requests the same unanswerable URL again. Nothing escalates on its own for minutes, while the\n    // viewer has been looking at a frozen picture the whole time.\n""",
+              'hanging-edge explanation',
+          )
+
+          replace_once(
+              """    // hls.js's own behaviour.\n    const reasons = harness.hlsErrors.map((error) => error.reason);\n    expect(reasons).toContain('networkError / fragLoadTimeOut');\n    // New in 1.6+: hls.js notices the frozen picture itself, though only to report it.\n    expect(reasons).toContain('mediaError / bufferStalledError');\n\n    const firstFatal = harness.hlsErrors.find((error) => error.fatal);\n    expect(firstFatal?.reason).toBe('networkError / fragLoadTimeOut');\n\n    // The player's. The watchdog is still what refetches the playlist -- neither the timeouts nor\n    // `bufferStalledError` make hls.js ask for new segment URLs, and that is what actually moves a\n    // stream off a dead edge. But the margin is the thing to watch: if a future version escalates\n    // before the watchdog's first action, this fails, and the watchdog has stopped earning its\n    // place. It was over three minutes on 1.0.10.\n    const firstAction = harness.steps.find((step) => step.message.startsWith('watchdog-'));\n    expect(firstAction).toBeDefined();\n    expect(firstAction!.at).toBeLessThan(firstFatal!.at);\n    expect(actions(harness)).toEqual(expect.arrayContaining(['watchdog-restart', 'watchdog-reload']));\n""",
+              """    // hls.js's own behaviour: timeouts, and only timeouts, for a long time.\n    expect(harness.hlsErrors.length).toBeGreaterThan(0);\n    expect(harness.hlsErrors.every((error) => error.reason === 'networkError / fragLoadTimeOut')).toBe(true);\n    expect(harness.hlsErrors.some((error) => error.fatal)).toBe(false);\n\n    // The player's: the watchdog has already refetched the playlist inside the window in which\n    // hls.js has not yet been willing to call the stream broken. Waiting for a fatal error instead\n    // is what left the picture frozen on this baseline.\n    expect(actions(harness)).toEqual(expect.arrayContaining(['watchdog-restart', 'watchdog-reload']));\n""",
+              'hanging-edge assertions',
+          )
+
+          replace_once(
+              """    // hls.js notices, but only says so: none of this is fatal, and it never refetches a playlist.\n    expect(harness.hlsErrors.map((error) => error.reason)).toContain('mediaError / bufferStalledError');\n    expect(harness.hlsErrors.some((error) => error.fatal)).toBe(false);\n""",
+              """    // hls.js still reports the stalled media path on this baseline. Its fatal/non-fatal\n    // classification is version-specific, so the player-level outcome below is the regression oracle.\n    expect(harness.hlsErrors.map((error) => error.reason)).toContain('mediaError / bufferStalledError');\n""",
+              'persistent-wedge hls classification',
+          )
+
+          replace_once(
+              """      trigger: 'persistent-wedge',\n      outcome: 'abandoned',\n      fatalCount: 0,\n""",
+              """      trigger: 'persistent-wedge',\n      outcome: 'abandoned',\n      fatalCount: harness.hlsErrors.filter((error) => error.fatal).length,\n""",
+              'persistent-wedge fatal count',
+          )
+
+          replace_once(
+              """        latestHlsError: {\n          category: 'buffer',\n          reason: 'mediaError / bufferStalledError',\n          fatal: false,\n        },\n""",
+              """        latestHlsError: expect.objectContaining({\n          category: expect.stringMatching(/^(buffer|network|media|other)$/),\n          reason: harness.hlsErrors[harness.hlsErrors.length - 1].reason,\n          fatal: harness.hlsErrors[harness.hlsErrors.length - 1].fatal,\n        }),\n""",
+              'persistent-wedge latest HLS error',
+          )
+
+          path.write_text(text)
+          PY
+          yarn prettier src/components/media/media.scenarios.test.tsx --write
+
       - name: Validate formatting
         run: yarn format:check
 

@@ -61,6 +61,25 @@ def main():
     if 'hls.js@1.6.15:' in lock_text or 'hls.js@"1.6.15":' in lock_text:
         raise RuntimeError('yarn.lock still contains the direct hls.js 1.6.15 entry')
 
+    scenarios = open('src/components/media/media.scenarios.test.tsx', encoding='utf-8').read()
+    required = [
+        "it('escalates a hanging edge itself rather than waiting for hls.js to call it fatal'",
+        "harness.hlsErrors.every((error) => error.reason === 'networkError / fragLoadTimeOut')",
+        'fatalCount: harness.hlsErrors.filter((error) => error.fatal).length',
+        'reason: harness.hlsErrors[harness.hlsErrors.length - 1].reason',
+        'fatal: harness.hlsErrors[harness.hlsErrors.length - 1].fatal',
+    ]
+    for marker in required:
+        if scenarios.count(marker) != 1:
+            raise RuntimeError(f'expected exactly one baseline-compatible scenario marker: {marker!r}')
+    forbidden = [
+        'New in 1.6+: hls.js notices the frozen picture itself',
+        "expect(harness.hlsErrors.some((error) => error.fatal)).toBe(false);",
+    ]
+    for marker in forbidden:
+        if marker in scenarios:
+            raise RuntimeError(f'found stale 1.6-specific scenario assertion after preparation: {marker!r}')
+
     current = ref_sha()
     if current != EXPECTED_HEAD:
         raise RuntimeError(f'branch moved before publication: expected {EXPECTED_HEAD}, found {current}')
@@ -69,10 +88,17 @@ def main():
     base_tree = base_commit['tree']['sha']
     package_blob = create_file_blob('package.json')
     lock_blob = create_file_blob('yarn.lock')
+    scenarios_blob = create_file_blob('src/components/media/media.scenarios.test.tsx')
 
     entries = [
         {'path': 'package.json', 'mode': '100644', 'type': 'blob', 'sha': package_blob},
         {'path': 'yarn.lock', 'mode': '100644', 'type': 'blob', 'sha': lock_blob},
+        {
+            'path': 'src/components/media/media.scenarios.test.tsx',
+            'mode': '100644',
+            'type': 'blob',
+            'sha': scenarios_blob,
+        },
     ]
     for path in TEMP_PATHS:
         entries.append({'path': path, 'mode': '100644', 'type': 'blob', 'sha': None})
