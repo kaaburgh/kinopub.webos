@@ -45,16 +45,29 @@ jobs:
           yarn prettier package.json --write
           yarn install --frozen-lockfile --ignore-scripts
 
-      - name: Validate rollback
-        run: |
-          yarn format:check
-          yarn typecheck
-          yarn lint
-          CI=true yarn test --watchAll=false
-          yarn test --watchAll=false --testPathPattern=media.scenarios
-          yarn build
-          yarn check:es5
-          git diff --check
+      - name: Validate formatting
+        run: yarn format:check
+
+      - name: Validate types
+        run: yarn typecheck
+
+      - name: Validate lint
+        run: yarn lint
+
+      - name: Validate tests
+        run: CI=true yarn test --watchAll=false
+
+      - name: Validate playback scenarios
+        run: yarn test --watchAll=false --testPathPattern=media.scenarios
+
+      - name: Validate build
+        run: yarn build
+
+      - name: Validate ES5 output
+        run: yarn check:es5
+
+      - name: Validate diff
+        run: git diff --check
 
       - name: Publish validated durable source tree
         env:
