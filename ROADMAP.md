@@ -1195,7 +1195,7 @@ which now records it.
 
 ### A14 — Walk the build-and-install document end to end on a TV
 
-- **Status:** Open — blocked on device evidence
+- **Status:** Partially implemented
 - **Depends on:** None
 - **Priority:** Low
 - **Category:** Build / release
@@ -1204,17 +1204,18 @@ which now records it.
   confirmed it installs and launches, which is the claim the document actually makes.
 - **Concrete evidence:** CI run `30903800595` (`master` @ `ccab33e`) shows "Build and package"
   green, including the check that `out/kinopub.webos_v<version>.ipk` exists. Nothing beyond that.
-  Two related staleness bugs: `.github/workflows/ci.yml:41-42` and `docs/ci.md:36-37` both state the
-  project has no test files, when there are 3 suites and 41 tests, and `--passWithNoTests` would now
-  hide a suite that stopped being discovered.
+  The CI test-discovery maintenance is now implemented: the normal test step runs without
+  `--passWithNoTests`, and `docs/ci.md` describes the existing unit and playback-scenario suites. PR
+  CI #212 passed with that fail-closed discovery rule. TV install and launch remain unverified.
 - **Motivation and expected benefit:** The document's whole purpose is independence from upstream
   release links; that is only true once someone has followed it.
 - **Proposed direction:** Follow `docs/build-and-install.md` on a clean machine through
-  `ares-install` and the smoke test, correcting whatever is wrong. Separately, drop
-  `--passWithNoTests` and fix both stale "no test files" claims.
+  `ares-install` and the smoke test, correcting whatever is wrong. The CI test-discovery guard and
+  stale CI documentation cleanup are complete; the television walkthrough is the remaining work.
 - **Dependencies and sequencing:** None.
 - **Compatibility risks:** None.
-- **Confidence:** code — high for the stale claims. device — untested for the install loop.
+- **Confidence:** code — high for the CI test-discovery guard. device — untested for the
+  install loop.
 - **Validation and acceptance criteria:** A build installed on the TV by following only this
   document; CI fails if the test suites disappear.
 - **Estimated scope:** Small.
