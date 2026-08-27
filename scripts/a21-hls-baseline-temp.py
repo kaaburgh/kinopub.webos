@@ -68,7 +68,7 @@ def main():
         "const wedgeEpisodes = harness.episodes.filter((episode) => episode.trigger === 'persistent-wedge');",
         "harness.episodes.filter((episode) => episode.outcome === 'abandoned')",
         'const wedgeEpisode = wedgeEpisodes[0];',
-        'fatalCount: harness.hlsErrors.filter((error) => error.fatal).length',
+        'fatalCount: 0,',
         'reason: harness.hlsErrors[harness.hlsErrors.length - 1].reason',
         'fatal: harness.hlsErrors[harness.hlsErrors.length - 1].fatal',
     ]
@@ -78,6 +78,7 @@ def main():
     forbidden = [
         'New in 1.6+: hls.js notices the frozen picture itself',
         '// hls.js notices, but only says so: none of this is fatal, and it never refetches a playlist.',
+        'fatalCount: harness.hlsErrors.filter((error) => error.fatal).length',
     ]
     for marker in forbidden:
         if marker in scenarios:

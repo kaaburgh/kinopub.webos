@@ -85,12 +85,6 @@ jobs:
           )
 
           replace_once(
-              """      trigger: 'persistent-wedge',\n      outcome: 'abandoned',\n      fatalCount: 0,\n""",
-              """      trigger: 'persistent-wedge',\n      outcome: 'abandoned',\n      fatalCount: harness.hlsErrors.filter((error) => error.fatal).length,\n""",
-              'persistent-wedge fatal count',
-          )
-
-          replace_once(
               """        latestHlsError: {\n          category: 'buffer',\n          reason: 'mediaError / bufferStalledError',\n          fatal: false,\n        },\n""",
               """        latestHlsError: expect.objectContaining({\n          category: expect.stringMatching(/^(buffer|network|media|other)$/),\n          reason: harness.hlsErrors[harness.hlsErrors.length - 1].reason,\n          fatal: harness.hlsErrors[harness.hlsErrors.length - 1].fatal,\n        }),\n""",
               'persistent-wedge latest HLS error',
