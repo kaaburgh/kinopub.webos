@@ -41,8 +41,10 @@ def prepare():
     )
 
     media = media.replace("fixedHlsLevelNameRef.current = null;", "fixedHlsLevelFingerprintRef.current = null;")
-    if media.count("fixedHlsLevelNameRef.current") != 2:
-        raise SystemExit(f"fixed HLS name ref: expected two remaining selection/recovery references, found {media.count('fixedHlsLevelNameRef.current')}")
+    if media.count("fixedHlsLevelNameRef.current") != 3:
+        raise SystemExit(
+            f"fixed HLS name ref: expected three remaining selection/recovery references, found {media.count('fixedHlsLevelNameRef.current')}"
+        )
 
     media = replace_once(
         media,
@@ -78,7 +80,7 @@ def prepare():
     levels = replace_once(
         levels,
         "export function getHlsFixedLevelChoices(levels: readonly LevelLike[] | undefined): HlsFixedLevelChoice[] {\n  return (levels || []).map((level, index) => ({ index, name: getHlsFixedLevelSourceName(level, index) }));\n}\n\nexport function findHlsFixedLevelIndex(levels: readonly LevelLike[] | undefined, sourceName: string) {\n  return getHlsFixedLevelChoices(levels).find((choice) => choice.name === sourceName)?.index ?? -1;\n}",
-        "export function getHlsFixedLevelChoices(levels: readonly LevelLike[] | undefined): HlsFixedLevelChoice[] {\n  return (levels || []).map((level, index) => ({ index, name: getHlsFixedLevelSourceName(level, index) }));\n}\n\nexport function findHlsFixedLevelIndex(levels: readonly LevelLike[] | undefined, sourceName: string) {\n  return getHlsFixedLevelChoices(levels).find((choice) => choice.name === sourceName)?.index ?? -1;\n}\n\n/**\n * Stable identity for restoring a user-selected rendition after an HLS rebuild. The UI label keeps\n * the current manifest index for disambiguation, while recovery keys on rendition metadata that is\n * expected to survive manifest reordering.\n */\nexport function getHlsFixedLevelFingerprint(level: LevelLike) {\n  return [\n    getPositiveNumber(level?.width),\n    getPositiveNumber(level?.height),\n    getPositiveNumber(level?.bitrate),\n    getStableString(level?.videoCodec),\n    getStableString(level?.audioCodec),\n    getStableString(level?.name),\n  ].join('|');\n}\n\nexport function findHlsFixedLevelChoiceByFingerprint(levels: readonly LevelLike[] | undefined, fingerprint: string) {\n  const index = (levels || []).findIndex((level) => getHlsFixedLevelFingerprint(level) === fingerprint);\n  return index === -1 ? undefined : { index, name: getHlsFixedLevelSourceName(levels![index], index) };\n}",
+        "export function getHlsFixedLevelChoices(levels: readonly LevelLike[] | undefined): HlsFixedLevelChoice[] {\n  return (levels || []).map((level, index) => ({ index, name: getHlsFixedLevelSourceName(level, index) }));\n}\n\nexport function findHlsFixedLevelIndex(levels: readonly LevelLike[] | undefined, sourceName: string) {\n  return getHlsFixedLevelChoices(levels).find((choice) => choice.name === sourceName)?.index ?? -1;\n}\n\n/**\n * Stable identity for restoring a user-selected rendition after an HLS rebuild. The UI label keeps\n * the current manifest index for disambiguation, while recovery keys on rendition metadata that is\n * expected to survive manifest reordering.\n */\nexport function getHlsFixedLevelFingerprint(level: LevelLike) {\n  return [\n    getPositiveNumber(level?.width),\n    getPositiveNumber(level?.height),\n    getPositiveNumber(level?.bitrate),\n    getStableString(level?.videoCodec),\n    getStableString(level?.audioCodec),\n    getStableString(level?.name),\n  ].join('|');\n}\n\nexport function findHlsFixedLevelChoiceByFingerprint(levels: readonly LevelLike[] | undefined, fingerprint: string) {\n  const matchingIndexes = (levels || []).reduce<number[]>((indexes, level, index) => {\n    if (getHlsFixedLevelFingerprint(level) === fingerprint) {\n      indexes.push(index);\n    }\n    return indexes;\n  }, []);\n\n  if (matchingIndexes.length !== 1) {\n    return undefined;\n  }\n\n  const index = matchingIndexes[0];\n  return { index, name: getHlsFixedLevelSourceName(levels![index], index) };\n}",
         "stable rendition lookup",
     )
 
@@ -99,8 +101,8 @@ def prepare():
     test = replace_once(
         test,
         "  test('falls back to a deterministic level label when dimensions are unavailable', () => {\n    expect(getHlsFixedLevelSourceName({}, 0)).toBe('HLS 1: качество неизвестно');\n  });",
-        "  test('restores the same rendition when a replacement manifest reorders equal-resolution levels', () => {\n    const fingerprint = getHlsFixedLevelFingerprint(levels[0]);\n    const reordered = [levels[1], levels[0], levels[2]];\n\n    expect(findHlsFixedLevelChoiceByFingerprint(reordered, fingerprint)).toEqual({\n      index: 1,\n      name: 'HLS 2: 1080p (1920x804)',\n    });\n  });\n\n  test('falls back to a deterministic level label when dimensions are unavailable', () => {\n    expect(getHlsFixedLevelSourceName({}, 0)).toBe('HLS 1: качество неизвестно');\n  });",
-        "reorder recovery test",
+        "  test('restores the same rendition when a replacement manifest reorders equal-resolution levels', () => {\n    const fingerprint = getHlsFixedLevelFingerprint(levels[0]);\n    const reordered = [levels[1], levels[0], levels[2]];\n\n    expect(findHlsFixedLevelChoiceByFingerprint(reordered, fingerprint)).toEqual({\n      index: 1,\n      name: 'HLS 2: 1080p (1920x804)',\n    });\n  });\n\n  test('fails closed when rendition fingerprints collide', () => {\n    const collidingLevels = [\n      { width: 1920, height: 804, bitrate: 4000000, videoCodec: 'avc1.640028' },\n      { width: 1920, height: 804, bitrate: 4000000, videoCodec: 'avc1.640028' },\n    ];\n    const fingerprint = getHlsFixedLevelFingerprint(collidingLevels[0]);\n\n    expect(findHlsFixedLevelChoiceByFingerprint(collidingLevels, fingerprint)).toBeUndefined();\n  });\n\n  test('falls back to a deterministic level label when dimensions are unavailable', () => {\n    expect(getHlsFixedLevelSourceName({}, 0)).toBe('HLS 1: качество неизвестно');\n  });",
+        "reorder and collision recovery tests",
     )
 
     with open(MEDIA, "w", encoding="utf-8") as f:
@@ -143,8 +145,10 @@ def publish():
     required = [
         "getHlsFixedLevelFingerprint",
         "findHlsFixedLevelChoiceByFingerprint",
+        "matchingIndexes.length !== 1",
         "fixedHlsLevelFingerprintRef",
         "reorders equal-resolution levels",
+        "fails closed when rendition fingerprints collide",
     ]
     combined = levels_text + media_text + test_text
     for marker in required:
@@ -159,12 +163,18 @@ def publish():
         with open(path, encoding="utf-8") as f:
             blob = api("POST", "/git/blobs", {"content": f.read(), "encoding": "utf-8"})["sha"]
         entries.append({"path": path, "mode": "100644", "type": "blob", "sha": blob})
-    entries.extend([
-        {"path": WORKFLOW, "mode": "100644", "type": "blob", "sha": None},
-        {"path": SCRIPT, "mode": "100644", "type": "blob", "sha": None},
-    ])
+    entries.extend(
+        [
+            {"path": WORKFLOW, "mode": "100644", "type": "blob", "sha": None},
+            {"path": SCRIPT, "mode": "100644", "type": "blob", "sha": None},
+        ]
+    )
     tree = api("POST", "/git/trees", {"base_tree": commit["tree"]["sha"], "tree": entries})["sha"]
-    durable = api("POST", "/git/commits", {"message": "fix: restore exact HLS rendition identity", "tree": tree, "parents": [expected]})["sha"]
+    durable = api(
+        "POST",
+        "/git/commits",
+        {"message": "fix: restore exact HLS rendition identity", "tree": tree, "parents": [expected]},
+    )["sha"]
 
     current = api("GET", f"/git/ref/heads/{quoted}")["object"]["sha"]
     if current != expected:
