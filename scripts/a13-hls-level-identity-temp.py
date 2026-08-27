@@ -55,7 +55,7 @@ def prepare():
 
     media = replace_once(
         media,
-        "          if (isAdaptive && fixedHlsLevelNameRef.current) {\n            const fixedLevelIndex = findHlsFixedLevelIndex(hls.levels, fixedHlsLevelNameRef.current);\n            if (fixedLevelIndex !== -1) {\n              hls.currentLevel = fixedLevelIndex;\n              return;\n            }\n\n            fixedHlsLevelNameRef.current = null;\n            setFixedHlsLevelName(null);\n          }",
+        "          if (isAdaptive && fixedHlsLevelNameRef.current) {\n            const fixedLevelIndex = findHlsFixedLevelIndex(hls.levels, fixedHlsLevelNameRef.current);\n            if (fixedLevelIndex !== -1) {\n              hls.currentLevel = fixedLevelIndex;\n              return;\n            }\n\n            fixedHlsLevelFingerprintRef.current = null;\n            setFixedHlsLevelName(null);\n          }",
         "          if (isAdaptive && fixedHlsLevelFingerprintRef.current) {\n            const fixedLevelChoice = findHlsFixedLevelChoiceByFingerprint(hls.levels, fixedHlsLevelFingerprintRef.current);\n            if (fixedLevelChoice) {\n              setFixedHlsLevelName(fixedLevelChoice.name);\n              hls.currentLevel = fixedLevelChoice.index;\n              return;\n            }\n\n            fixedHlsLevelFingerprintRef.current = null;\n            setFixedHlsLevelName(null);\n          }",
         "manifest restores rendition by fingerprint",
     )
