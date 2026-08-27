@@ -3,6 +3,11 @@ type LevelLike = {
   height?: number;
 };
 
+export type HlsFixedLevelChoice = {
+  index: number;
+  name: string;
+};
+
 function getPositiveNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
 }
@@ -60,4 +65,29 @@ export function findLevelIndexForQuality(levels: readonly LevelLike[] | undefine
   });
 
   return bestIndex;
+}
+
+/**
+ * Stable, human-readable name for an exact level from a master playlist.
+ *
+ * The level index is part of the name deliberately: manifests can contain two renditions with the
+ * same resolution but different bitrates/codecs, and A13 requires every manifest level to remain
+ * independently selectable rather than collapsing them by nominal quality.
+ */
+export function getHlsFixedLevelSourceName(level: LevelLike, index: number) {
+  const qualityHeight = getLevelQualityHeight(level);
+  const width = getPositiveNumber(level?.width);
+  const height = getPositiveNumber(level?.height);
+  const quality = qualityHeight ? `${qualityHeight}p` : 'качество неизвестно';
+  const resolution = width && height ? ` (${width}x${height})` : '';
+
+  return `HLS ${index + 1}: ${quality}${resolution}`;
+}
+
+export function getHlsFixedLevelChoices(levels: readonly LevelLike[] | undefined): HlsFixedLevelChoice[] {
+  return (levels || []).map((level, index) => ({ index, name: getHlsFixedLevelSourceName(level, index) }));
+}
+
+export function findHlsFixedLevelIndex(levels: readonly LevelLike[] | undefined, sourceName: string) {
+  return getHlsFixedLevelChoices(levels).find((choice) => choice.name === sourceName)?.index ?? -1;
 }
