@@ -21,6 +21,22 @@ jobs:
           node-version: 14
           cache: yarn
       - run: yarn install --frozen-lockfile
+      - name: Correct helper reference-count guard
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('scripts/a13-hls-level-identity-temp.py')
+          text = path.read_text(encoding='utf-8')
+          old_count = 'if media.count("fixedHlsLevelNameRef.current") != 2:'
+          new_count = 'if media.count("fixedHlsLevelNameRef.current") != 3:'
+          old_message = 'fixed HLS name ref: expected two remaining selection/recovery references'
+          new_message = 'fixed HLS name ref: expected three remaining selection/recovery references'
+          if text.count(old_count) != 1 or text.count(old_message) != 1:
+              raise SystemExit('expected exactly one stale reference-count guard and message')
+          text = text.replace(old_count, new_count, 1).replace(old_message, new_message, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
       - name: Prepare stable HLS rendition identity fix
         run: python3 scripts/a13-hls-level-identity-temp.py prepare
       - name: Format changed files
