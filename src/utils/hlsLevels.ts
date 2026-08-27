@@ -1,6 +1,10 @@
 type LevelLike = {
   width?: number;
   height?: number;
+  bitrate?: number;
+  videoCodec?: string;
+  audioCodec?: string;
+  name?: string;
 };
 
 export type HlsFixedLevelChoice = {
@@ -10,6 +14,10 @@ export type HlsFixedLevelChoice = {
 
 function getPositiveNumber(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function getStableString(value: unknown) {
+  return typeof value === 'string' ? value : '';
 }
 
 /**
@@ -90,4 +98,36 @@ export function getHlsFixedLevelChoices(levels: readonly LevelLike[] | undefined
 
 export function findHlsFixedLevelIndex(levels: readonly LevelLike[] | undefined, sourceName: string) {
   return getHlsFixedLevelChoices(levels).find((choice) => choice.name === sourceName)?.index ?? -1;
+}
+
+/**
+ * Stable identity for restoring a user-selected rendition after an HLS rebuild. The UI label keeps
+ * the current manifest index for disambiguation, while recovery keys on rendition metadata that is
+ * expected to survive manifest reordering.
+ */
+export function getHlsFixedLevelFingerprint(level: LevelLike) {
+  return [
+    getPositiveNumber(level?.width),
+    getPositiveNumber(level?.height),
+    getPositiveNumber(level?.bitrate),
+    getStableString(level?.videoCodec),
+    getStableString(level?.audioCodec),
+    getStableString(level?.name),
+  ].join('|');
+}
+
+export function findHlsFixedLevelChoiceByFingerprint(levels: readonly LevelLike[] | undefined, fingerprint: string) {
+  const matchingIndexes = (levels || []).reduce<number[]>((indexes, level, index) => {
+    if (getHlsFixedLevelFingerprint(level) === fingerprint) {
+      indexes.push(index);
+    }
+    return indexes;
+  }, []);
+
+  if (matchingIndexes.length !== 1) {
+    return undefined;
+  }
+
+  const index = matchingIndexes[0];
+  return { index, name: getHlsFixedLevelSourceName(levels![index], index) };
 }
