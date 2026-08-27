@@ -89,6 +89,8 @@ jobs:
               raise SystemExit(f'expected exactly one fallback-label test marker, found {test.count(marker)}')
           test_path.write_text(test.replace(marker, collision + marker, 1), encoding='utf-8')
           PY
+      - name: Format helper workflow
+        run: yarn prettier .github/workflows/a13-hls-level-identity-temp.yml --write
       - name: Format changed files
         run: yarn prettier src/components/media/media.new.tsx src/utils/hlsLevels.ts src/utils/hlsLevels.test.ts --write
       - name: Validate formatting
