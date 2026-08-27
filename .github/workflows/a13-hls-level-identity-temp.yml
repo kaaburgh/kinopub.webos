@@ -1,26 +1,32 @@
 name: A13 exact HLS rendition identity helper
 
 on:
-  pull_request:
-    branches: [master]
+  push:
+    branches:
+      - agent-a13-hls-level-choices
 
 permissions:
   contents: write
 
 jobs:
   prepare-and-publish:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'agent-a13-hls-level-choices'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node.js and Yarn
+        uses: actions/setup-node@v4
         with:
           node-version: 14
           cache: yarn
-      - run: yarn install --frozen-lockfile
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
       - name: Correct helper reference-count guard
         run: |
           python3 - <<'PY'
@@ -37,8 +43,10 @@ jobs:
           text = text.replace(old_count, new_count, 1).replace(old_message, new_message, 1)
           path.write_text(text, encoding='utf-8')
           PY
+
       - name: Prepare stable HLS rendition identity fix
         run: python3 scripts/a13-hls-level-identity-temp.py prepare
+
       - name: Make rendition recovery fail closed on fingerprint collisions
         run: |
           python3 - <<'PY'
@@ -89,29 +97,37 @@ jobs:
               raise SystemExit(f'expected exactly one fallback-label test marker, found {test.count(marker)}')
           test_path.write_text(test.replace(marker, collision + marker, 1), encoding='utf-8')
           PY
-      - name: Format helper workflow
-        run: yarn prettier .github/workflows/a13-hls-level-identity-temp.yml --write
+
       - name: Format changed files
         run: yarn prettier src/components/media/media.new.tsx src/utils/hlsLevels.ts src/utils/hlsLevels.test.ts --write
+
       - name: Validate formatting
         run: yarn format:check
+
       - name: Validate types
         run: yarn typecheck
+
       - name: Validate lint
         run: yarn lint
+
       - name: Validate tests
         run: CI=true yarn test --watchAll=false
+
       - name: Validate playback scenarios
         run: yarn test --watchAll=false --testPathPattern=media.scenarios
+
       - name: Validate build
         run: yarn build
+
       - name: Validate ES5 output
         run: yarn check:es5
+
       - name: Validate diff
         run: git diff --check
+
       - name: Publish durable identity fix and remove helper
         env:
           GH_TOKEN: ${{ github.token }}
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-          HEAD_BRANCH: ${{ github.head_ref }}
+          EXPECTED_HEAD: ${{ github.sha }}
+          HEAD_BRANCH: ${{ github.ref_name }}
         run: python3 scripts/a13-hls-level-identity-temp.py publish
