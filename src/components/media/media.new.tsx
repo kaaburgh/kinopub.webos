@@ -8,7 +8,13 @@ import useStorageState from 'hooks/useStorageState';
 import { DecodeHealth, DecodeSample, EMPTY_DECODE_HEALTH, evaluateDecodeHealth, pruneSamples, pruneTimestamps } from 'utils/decodeHealth';
 import { VideoRange, getStreamVideoRange } from 'utils/hdr';
 import { getFailureCategory } from 'utils/hlsFailures';
-import { findLevelIndexForQuality } from 'utils/hlsLevels';
+import {
+  findHlsFixedLevelChoiceByFingerprint,
+  findHlsFixedLevelIndex,
+  findLevelIndexForQuality,
+  getHlsFixedLevelChoices,
+  getHlsFixedLevelFingerprint,
+} from 'utils/hlsLevels';
 import { provesStreamRecovered } from 'utils/hlsRecovery';
 import { endPlaybackSession, logPlaybackIssue, resetPlaybackIssueReports, sentryEpisodeSink, startPlaybackSession } from 'utils/logging';
 import { createPlaybackEpisodeTracker } from 'utils/playbackEpisode';
@@ -211,6 +217,11 @@ function useVideoPlayer({
   // with multiple levels, i.e. capable of real ABR/Auto selection.
   const [isAdaptiveLevel, setIsAdaptiveLevel] = useState(false);
   const [qualityMode, setQualityMode] = useState<'auto' | 'fixed'>('fixed');
+  // Exact manifest-level choices are separate from API source tracks: choosing one pins an HLS
+  // level in place without replacing the source URL. Keep a rendition fingerprint in a ref so a
+  // recovery rebuild can find the same rendition even when the replacement manifest reorders it.
+  const [fixedHlsLevelName, setFixedHlsLevelName] = useState<string | null>(null);
+  const fixedHlsLevelFingerprintRef = useRef<string | null>(null);
   // Mirrors qualityMode synchronously so a pending Auto request survives a
   // replacement manifest that is still loading (see setSourceTrack below).
   const qualityModeRef = useRef(qualityMode);
@@ -369,13 +380,20 @@ function useVideoPlayer({
       return sourceTracks;
     }
 
-    // Only a genuine master playlist with multiple HLS levels gets an
-    // explicit Auto option, delegating level selection to HLS.js.
-    return [{ ...currentSourceTrack, name: AUTO_SOURCE_NAME, default: false }, ...sourceTracks];
+    // Only a genuine master playlist with multiple HLS levels gets Auto and exact manifest
+    // choices. The synthetic tracks intentionally reuse the current source URL: selecting one must
+    // pin hls.js in place, not route through the API source-change path.
+    const hlsLevelTracks = getHlsFixedLevelChoices(hlsRef.current?.levels).map(({ name }) => ({
+      ...currentSourceTrack,
+      name,
+      default: false,
+    }));
+
+    return [{ ...currentSourceTrack, name: AUTO_SOURCE_NAME, default: false }, ...sourceTracks, ...hlsLevelTracks];
   }, [sourceTracks, isAdaptiveLevel, currentSourceTrack]);
   const getSourceTrack = useCallback(
-    () => (qualityMode === 'auto' && isAdaptiveLevel ? AUTO_SOURCE_NAME : currentSourceTrack?.name),
-    [qualityMode, isAdaptiveLevel, currentSourceTrack],
+    () => (qualityMode === 'auto' && isAdaptiveLevel ? AUTO_SOURCE_NAME : fixedHlsLevelName || currentSourceTrack?.name),
+    [qualityMode, isAdaptiveLevel, fixedHlsLevelName, currentSourceTrack],
   );
   const setSourceTrack = useCallback(
     (sourceTrackName: string) => {
@@ -384,6 +402,8 @@ function useVideoPlayer({
       // yet), the request is kept in qualityModeRef and honored by the
       // MANIFEST_PARSED handler below once the new levels are known.
       if (sourceTrackName === AUTO_SOURCE_NAME) {
+        fixedHlsLevelFingerprintRef.current = null;
+        setFixedHlsLevelName(null);
         qualityModeRef.current = 'auto';
         setQualityMode('auto');
 
@@ -394,9 +414,22 @@ function useVideoPlayer({
         return;
       }
 
+      const hls = hlsRef.current;
+      const fixedHlsLevelIndex = findHlsFixedLevelIndex(hls?.levels, sourceTrackName);
+      if (fixedHlsLevelIndex !== -1 && hls && hls.levels.length > 1) {
+        fixedHlsLevelFingerprintRef.current = getHlsFixedLevelFingerprint(hls.levels[fixedHlsLevelIndex]);
+        setFixedHlsLevelName(sourceTrackName);
+        qualityModeRef.current = 'fixed';
+        setQualityMode('fixed');
+        hls.nextLevel = fixedHlsLevelIndex;
+        return;
+      }
+
       const sourceTrackIndex = sourceTracks?.findIndex((sourceTrack) => sourceTrack.name === sourceTrackName) ?? -1;
       if (sourceTrackIndex !== -1) {
         const sourceTrack = sourceTracks![sourceTrackIndex];
+        fixedHlsLevelFingerprintRef.current = null;
+        setFixedHlsLevelName(null);
         qualityModeRef.current = 'fixed';
         setQualityMode('fixed');
         setCurrentSourceTrack(sourceTrack);
@@ -834,6 +867,18 @@ function useVideoPlayer({
             // Auto was requested but this manifest can't adapt; fall back.
             qualityModeRef.current = 'fixed';
             setQualityMode('fixed');
+          }
+
+          if (isAdaptive && fixedHlsLevelFingerprintRef.current) {
+            const fixedLevelChoice = findHlsFixedLevelChoiceByFingerprint(hls.levels, fixedHlsLevelFingerprintRef.current);
+            if (fixedLevelChoice) {
+              setFixedHlsLevelName(fixedLevelChoice.name);
+              hls.currentLevel = fixedLevelChoice.index;
+              return;
+            }
+
+            fixedHlsLevelFingerprintRef.current = null;
+            setFixedHlsLevelName(null);
           }
 
           if (isAdaptive) {
