@@ -1,5 +1,5 @@
 import * as Sentry from '@sentry/browser';
-import { Integrations as TracingIntegrations } from '@sentry/tracing';
+import { BrowserTracing } from '@sentry/tracing';
 
 import { ApiFailure, apiFailureKey, describeApiFailure, isServerFault, normalizeEndpoint } from 'utils/apiFailures';
 import { APP_VERSION } from 'utils/app';
@@ -19,7 +19,7 @@ if (shouldInitSentry(IS_WEB, SENTRY_DSN)) {
   Sentry.init({
     release: APP_VERSION,
     dsn: SENTRY_DSN,
-    integrations: [new TracingIntegrations.BrowserTracing()],
+    integrations: [new BrowserTracing()],
     tracesSampleRate: 1.0,
     // Stream URLs carry access tokens in their query string, and they turn up in breadcrumbs, request
     // data and error messages alike. Reduce every URL to its hostname before anything leaves the TV —
@@ -236,7 +236,7 @@ export function logPlaybackIssue(issue: PlaybackIssue, context: PlaybackIssueCon
 
     scope.setContext('playback', scrubUrls({ ...context }));
     // Playback keeps going through these, so they are warnings rather than crashes.
-    scope.setLevel(Sentry.Severity.Warning);
+    scope.setLevel('warning');
 
     Sentry.captureMessage(`playback: ${issue}`);
   });
@@ -282,7 +282,7 @@ export function logApiFailure(failure: ApiFailure) {
         reason: failure.reason,
       }),
     );
-    scope.setLevel(isServerFault(failure) ? Sentry.Severity.Error : Sentry.Severity.Warning);
+    scope.setLevel(isServerFault(failure) ? 'error' : 'warning');
 
     Sentry.captureMessage(describeApiFailure(failure));
   });
@@ -298,7 +298,7 @@ export const sentryEpisodeSink: EpisodeSink = {
     Sentry.addBreadcrumb({
       category: crumb.category,
       message: crumb.message,
-      level: crumb.level === 'error' ? Sentry.Severity.Error : crumb.level === 'warning' ? Sentry.Severity.Warning : Sentry.Severity.Info,
+      level: crumb.level === 'error' ? 'error' : crumb.level === 'warning' ? 'warning' : 'info',
       data: crumb.data ? scrubUrls(crumb.data) : undefined,
     });
   },
@@ -330,9 +330,7 @@ export const sentryEpisodeSink: EpisodeSink = {
       scope.setContext('playback_episode', scrubPlaybackEpisode(summary));
       // Only the player giving up on its own is an error. A viewer who leaves, or retries by hand,
       // ended the episode deliberately -- worth recording, not worth paging over.
-      scope.setLevel(
-        summary.outcome === 'abandoned' && summary.endedBy === 'grace-period' ? Sentry.Severity.Error : Sentry.Severity.Warning,
-      );
+      scope.setLevel(summary.outcome === 'abandoned' && summary.endedBy === 'grace-period' ? 'error' : 'warning');
 
       Sentry.captureMessage(
         summary.outcome === 'abandoned'
