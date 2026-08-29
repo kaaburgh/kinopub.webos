@@ -6,6 +6,10 @@ import { render } from 'react-dom';
 import App from './App';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
+import { installMediaPlayAbortGuard } from './utils/mediaPlayAbortGuard';
+
+installMediaPlayAbortGuard();
+
 const app = <App />;
 
 // In a browser environment, render instead of exporting
