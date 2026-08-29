@@ -4,8 +4,9 @@ import './plugins';
 import { render } from 'react-dom';
 
 import App from './App';
-import { installMediaPlayAbortGuard } from './utils/mediaPlayAbortGuard';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+
+import { installMediaPlayAbortGuard } from './utils/mediaPlayAbortGuard';
 
 installMediaPlayAbortGuard();
 

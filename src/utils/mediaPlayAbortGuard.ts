@@ -58,8 +58,7 @@ function breadcrumbExpectedInterruption(action: ExpectedMediaPlayInterruption) {
  * original promise for successful and unexpected failures. The process-wide lifetime is deliberate.
  */
 export function installMediaPlayAbortGuard(
-  prototype: MediaPlayPrototype | undefined =
-    typeof HTMLMediaElement === 'undefined' ? undefined : HTMLMediaElement.prototype,
+  prototype: MediaPlayPrototype | undefined = typeof HTMLMediaElement === 'undefined' ? undefined : HTMLMediaElement.prototype,
   onExpectedInterruption: ExpectedInterruptionSink = breadcrumbExpectedInterruption,
 ) {
   if (!prototype) {
