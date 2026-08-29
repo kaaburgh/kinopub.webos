@@ -558,6 +558,22 @@ function formatBufferAppendStages(stages: BufferAppendStagesByType) {
   return entries.map(([bufferType, stage]) => `${bufferType}: ${formatBufferAppendStageValue(stage)}`).join('; ');
 }
 
+function formatBufferAppendOverlayStages(stages: BufferAppendStagesByType) {
+  const entries = Object.entries(stages);
+
+  if (!entries.length) {
+    return 'idle';
+  }
+
+  return entries
+    .map(([bufferType, stage]) =>
+      stage.status === 'appending'
+        ? `${bufferType} appending ${formatSeconds((Date.now() - stage.startedAt) / 1000)}`
+        : `${bufferType} appended ${formatSeconds(stage.durationSeconds)}`,
+    )
+    .join(' · ');
+}
+
 function formatFragmentLevel(fragment: LastFragmentInfo) {
   if (fragment.height) {
     return `${fragment.height}p`;
@@ -1160,7 +1176,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
                   'text-yellow-300': Object.values(bufferAppendStages).some((stage) => stage.status === 'appending'),
                 })}
               >
-                append: {formatBufferAppendStages(bufferAppendStages)}
+                append: {formatBufferAppendOverlayStages(bufferAppendStages)}
               </div>
               <div>emergency aborts: {emergencyAbortCount}</div>
             </section>
