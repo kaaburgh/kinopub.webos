@@ -244,28 +244,26 @@ class KinopubApiClient extends BaseApiClient {
   async deviceAuthorization(deviceInfo: DeviceInfo, onConfirm?: OnConfirm): Promise<void> {
     this.clearTimers();
 
-    // Keep the session for as long as the backend has not refused it. While it is unreachable an
-    // access token that has not expired is enough to start; without one, wait for the network.
-    for (let attempt = 0; this.getRefreshToken(); attempt += 1) {
-      const renewal = await this.renewSession();
-
-      if (renewal === 'renewed') {
-        await this.deviceNotify(deviceInfo);
-        return;
-      }
-
-      if (renewal === 'rejected') {
-        break;
-      }
-
-      if (this.getAccessToken()) {
-        return;
-      }
-
-      await waitForRetry(attempt);
-    }
-
+    // Every attempt starts from the stored session, because another authorization may have paired
+    // or renewed while this one waited. Keep the session for as long as the backend has not refused
+    // it, and wait for a renewal even while the access token is valid: starting without the network
+    // would send the first screen's requests into it, and `useApi` caches their `{ error }` bodies as
+    // data that is not fetched again once the network is back.
     for (let attempt = 0; ; attempt += 1) {
+      if (this.getRefreshToken()) {
+        const renewal = await this.renewSession();
+
+        if (renewal === 'renewed') {
+          await this.deviceNotify(deviceInfo);
+          return;
+        }
+
+        if (renewal === 'unavailable') {
+          await waitForRetry(attempt);
+          continue;
+        }
+      }
+
       try {
         return await this.requestUserCode(deviceInfo, onConfirm);
       } catch (ex) {

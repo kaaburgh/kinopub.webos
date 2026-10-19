@@ -171,20 +171,33 @@ describe('KinopubApiClient session renewal', () => {
     expect(store.tokens).toEqual({ access_token: 'a2', refresh_token: 'r2' });
   });
 
-  it('does not block startup on an unreachable refresh while the access token is still valid', async () => {
+  it('waits for the renewal even while the access token is still valid', async () => {
+    // Starting early would send the first screen's requests into a dead network, and their
+    // `{ error }` bodies would be cached as data and never refetched once it came back.
+    let networkUp = false;
     const store = { tokens: { access_token: 'a1', refresh_token: 'r1' } };
     const client = createClient(store);
     const onConfirm = jest.fn();
 
-    installBackend(unreachable);
+    installBackend(
+      () => (networkUp ? undefined : unreachable()),
+      (url) => (isRefresh(url) ? renewed('a2', 'r2') : undefined),
+      (url) => (isNotify(url) ? answer(200, {}) : undefined),
+    );
 
     const authorization = track(client.deviceAuthorization(deviceInfo, onConfirm));
 
-    await flushPromises();
+    await advance(10 * 1000);
+
+    expect(authorization.settled).toBe(false);
+    expect(store.tokens).toEqual({ access_token: 'a1', refresh_token: 'r1' });
+
+    networkUp = true;
+    await advance(60 * 1000);
 
     expect(authorization).toEqual({ settled: true, rejected: false });
     expect(onConfirm).not.toHaveBeenCalled();
-    expect(store.tokens).toEqual({ access_token: 'a1', refresh_token: 'r1' });
+    expect(store.tokens).toEqual({ access_token: 'a2', refresh_token: 'r2' });
   });
 
   it.each([
@@ -320,5 +333,53 @@ describe('KinopubApiClient session renewal', () => {
     expect(authorization).toEqual({ settled: true, rejected: false });
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(store.tokens).toEqual({ access_token: 'a1', refresh_token: 'r1' });
+  });
+
+  it('does not clear a session another authorization established while it waited to retry', async () => {
+    // The authorization effect can start a second attempt on the same client while the first is
+    // still asking for a code. If the second pairs first, the first must not wipe that session.
+    const store = { tokens: {} as Tokens };
+    const client = createClient(store);
+    const onConfirm = jest.fn();
+    let answerFirstCodeRequest: (response: Response) => void = () => undefined;
+    let codeRequests = 0;
+
+    const fetchMock = installBackend(
+      (url) => {
+        if (!isDeviceCode(url)) {
+          return undefined;
+        }
+
+        codeRequests += 1;
+
+        return codeRequests === 1
+          ? new Promise<Response>((resolve) => {
+              answerFirstCodeRequest = resolve;
+            })
+          : deviceCode(`CODE${codeRequests}`);
+      },
+      (url) => (isDevicePoll(url) ? renewed('a1', 'r1') : undefined),
+      (url) => (isRefresh(url) ? renewed('a2', 'r2') : undefined),
+      (url) => (isNotify(url) ? answer(200, {}) : undefined),
+    );
+
+    const first = track(client.deviceAuthorization(deviceInfo, onConfirm));
+
+    await flushPromises();
+
+    const second = track(client.deviceAuthorization(deviceInfo, onConfirm));
+
+    await advance(10 * 1000);
+
+    expect(second).toEqual({ settled: true, rejected: false });
+    expect(store.tokens).toEqual({ access_token: 'a1', refresh_token: 'r1' });
+
+    answerFirstCodeRequest(answer(503, { error: 'server_error' }));
+    await advance(60 * 1000);
+
+    // As before this change: the retry finds the stored session and renews it instead of pairing.
+    expect(first).toEqual({ settled: true, rejected: false });
+    expect(store.tokens).toEqual({ access_token: 'a2', refresh_token: 'r2' });
+    expect(fetchMock.mock.calls.filter(([url]) => isDeviceCode(url))).toHaveLength(2);
   });
 });

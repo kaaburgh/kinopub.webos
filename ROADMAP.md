@@ -418,11 +418,13 @@ Ordered by priority, then by what unblocks what.
 > failed; it clears them only when the token endpoint answers that it refuses the session (a JSON 4xx
 > other than 408/429, or an RFC 6749 refusal code). An unreachable host, a timeout, an HTML page from
 > something in front of the API, 408, 429 and 5xx keep the tokens and are retried with backoff
-> (2 s doubling to 30 s, cut short by the browser's `online` event). Startup does not wait for that
-> retry when the stored access token has not expired. A 401 on an ordinary request renews once and
+> (2 s doubling to 30 s, cut short by the browser's `online` event). Startup waits for a renewal even
+> while the stored access token is valid, and every retry re-reads the stored session first, so a
+> stale attempt cannot clear a session another attempt has just established. A 401 on an ordinary
+> request renews once and
 > repeats the request instead of ending the session. Concurrent renewals across every `ApiClient`
 > instance share one request. A pairing poll that fails in transit keeps polling the code already on
-> screen. Rules and tests: `src/utils/sessionRenewal.ts`, `src/api/kinopub.test.ts` (12 tests) and
+> screen. Rules and tests: `src/utils/sessionRenewal.ts`, `src/api/kinopub.test.ts` (13 tests) and
 > `src/utils/sessionRenewal.test.ts`. **Not yet seen on the TV** — which of the mechanisms below the
 > LG G5 actually hits is not established.
 
@@ -442,7 +444,12 @@ Ordered by priority, then by what unblocks what.
   when the asynchronously resolved `deviceInfo` changes (`:60`), so two renewals with the same refresh
   token could run at once. runtime — `src/api/kinopub.test.ts` reproduced each path against the old
   client (11 of 12 cases failed, including two renewal requests sent with one refresh token) and
-  passes after the change. device — only the maintainer's report of the symptom.
+  passes after the change. Review of the first implementation (#94) found two regressions, both now
+  covered: starting on a still-valid access token while the renewal was unavailable let the first
+  screen's requests fail into React Query, which caches `{ error }` bodies from `useApi` as data under
+  the 5-minute `staleTime` and did not refetch them after reconnecting; and a pairing retry that no
+  longer re-read the stored session could clear one that a concurrent attempt had just paired.
+  device — only the maintainer's report of the symptom.
 - **Hypotheses:** `assumed`, any of: (1) the app starts before the TV's network is up, so the
   power-on renewal fails in transit; (2) the app is resumed rather than restarted (Quick Start+), the
   access token has expired, and the first request answers 401; (3) the late `deviceInfo` starts a
@@ -457,9 +464,11 @@ Ordered by priority, then by what unblocks what.
 - **Compatibility risks:** Low. No new browser APIs: the `online` event and `setTimeout` exist on
   Chrome 35, and nothing depends on `AbortController`. If KinoPub refused a token with an
   unrecognised answer that this classifies as transient (a 2xx without tokens, or a 5xx), startup
-  without a valid access token would wait indefinitely instead of pairing. That is the same visible
-  state as the old behaviour while the network is down (a spinner), and the retries stay bounded at
-  one request per 30 s.
+  would wait indefinitely instead of pairing; so would an outage of the token endpoint alone, even
+  with the rest of the API answering. That is the same visible state as the old behaviour while the
+  network is down (a spinner), and the retries stay bounded at one request per 30 s. Failed requests
+  later in a session are still cached as data by `useApi`; that predates this item and is not
+  changed here.
 - **Confidence:** code/runtime — high for the client's decisions. device — not established.
 - **Validation and acceptance criteria:** On the LG G5, over several days of normal use, power-on
   never shows the pairing screen. Disconnect the network, switch the TV off and on, start the app,
