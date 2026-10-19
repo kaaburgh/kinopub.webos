@@ -412,6 +412,61 @@ Ordered by priority, then by what unblocks what.
   mapping if `base.ts` is refactored enough to allow one.
 - **Estimated scope:** Small–medium.
 
+### A23 — Stay paired across a power-on: only the backend may end the session
+
+> **Implemented, validation incomplete.** The client no longer clears the tokens because a renewal
+> failed; it clears them only when the token endpoint answers that it refuses the session (a JSON 4xx
+> other than 408/429, or an RFC 6749 refusal code). An unreachable host, a timeout, an HTML page from
+> something in front of the API, 408, 429 and 5xx keep the tokens and are retried with backoff
+> (2 s doubling to 30 s, cut short by the browser's `online` event). Startup does not wait for that
+> retry when the stored access token has not expired. A 401 on an ordinary request renews once and
+> repeats the request instead of ending the session. Concurrent renewals across every `ApiClient`
+> instance share one request. A pairing poll that fails in transit keeps polling the code already on
+> screen. Rules and tests: `src/utils/sessionRenewal.ts`, `src/api/kinopub.test.ts` (12 tests) and
+> `src/utils/sessionRenewal.test.ts`. **Not yet seen on the TV** — which of the mechanisms below the
+> LG G5 actually hits is not established.
+
+- **Status:** Completed, validation incomplete
+- **Depends on:** None
+- **Priority:** High
+- **Category:** Robustness / authorization
+- **Origin:** Maintainer report: the TV asks for a pairing code on every power-on.
+- **Problem or opportunity:** Re-pairing needs another device and a login on the KinoPub site, so a
+  session that does not survive a power-on makes the app tiresome on exactly the device it targets.
+- **Concrete evidence:** code — before this change, `processTokensReponse` called `clearTokens()`
+  before reading the answer (`src/api/kinopub.ts:73-74` at `6d726c8`), and `deviceAuthorization`
+  sent every stored refresh token through it (`:165-181`). `BaseApiClient.request` returns
+  `{ error }` for a thrown or timed-out request, so any failed renewal ended the session. `request`
+  also cleared every token on any 401 (`src/api/base.ts:127` at `6d726c8`). Every hook builds its own
+  `ApiClient` (`hooks/useApi.ts`, `useApiMutation.ts`), and `useDeviceAuthorizationEffect` re-runs
+  when the asynchronously resolved `deviceInfo` changes (`:60`), so two renewals with the same refresh
+  token could run at once. runtime — `src/api/kinopub.test.ts` reproduced each path against the old
+  client (11 of 12 cases failed, including two renewal requests sent with one refresh token) and
+  passes after the change. device — only the maintainer's report of the symptom.
+- **Hypotheses:** `assumed`, any of: (1) the app starts before the TV's network is up, so the
+  power-on renewal fails in transit; (2) the app is resumed rather than restarted (Quick Start+), the
+  access token has expired, and the first request answers 401; (3) the late `deviceInfo` starts a
+  second renewal and the backend refuses a refresh token that has already been used. Whether
+  KinoPub's refresh tokens are single-use is not established. A3's reporting can tell (1) from (3):
+  `api: unreachable POST /oauth2/token` at power-on times points at (1), and
+  `api: http POST /oauth2/token 400` points at a refused token.
+- **Implemented direction:** see the summary above. Only definitive refusals clear the session;
+  every other failure keeps it and retries.
+- **Dependencies and sequencing:** Builds on **A9**'s request deadline, which now ends in a retry
+  instead of a logout. Independent of the playback items.
+- **Compatibility risks:** Low. No new browser APIs: the `online` event and `setTimeout` exist on
+  Chrome 35, and nothing depends on `AbortController`. If KinoPub refused a token with an
+  unrecognised answer that this classifies as transient (a 2xx without tokens, or a 5xx), startup
+  without a valid access token would wait indefinitely instead of pairing. That is the same visible
+  state as the old behaviour while the network is down (a spinner), and the retries stay bounded at
+  one request per 30 s.
+- **Confidence:** code/runtime — high for the client's decisions. device — not established.
+- **Validation and acceptance criteria:** On the LG G5, over several days of normal use, power-on
+  never shows the pairing screen. Disconnect the network, switch the TV off and on, start the app,
+  reconnect: the app continues without pairing. Removing the device on the KinoPub site still leads
+  to the pairing screen on the next start.
+- **Estimated scope:** Small.
+
 ### A4 — Decide what telemetry this fork sends, and where
 
 > **Decided and implemented.** All three sub-decisions were made by the repository owner:
