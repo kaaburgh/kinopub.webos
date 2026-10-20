@@ -10,6 +10,16 @@ import { EncodedCapture, ExportCapture, encodeCapture } from './diagnosticsExpor
 import DiagnosticsQr from './diagnosticsQr';
 import { HlsSourceState, settleHlsSourceQuality, transitionHlsSource } from './diagnosticsSourceHistory';
 import { getVideoNode } from './getVideoNode';
+import {
+  BufferAppendStagesByType,
+  FragLoadStagesByStream,
+  PendingAppends,
+  completeAppend,
+  formatBufferAppendStages,
+  formatFragLoadStages,
+  resetAppends,
+  startAppend,
+} from './segmentPipeline';
 
 import { APP_VERSION } from 'utils/app';
 import { getLevelVideoRange, readDisplayDynamicRange } from 'utils/hdr';
@@ -19,6 +29,8 @@ import { getPlaybackSessionId } from 'utils/logging';
 
 const HISTORY_LIMIT = 30;
 const VIDEO_EVENTS = ['playing', 'waiting', 'stalled', 'canplay', 'canplaythrough', 'seeking', 'seeked', 'error', 'ended'];
+// hls.js discards its SourceBuffers on these without reporting the appends it drops with them.
+const HLS_BUFFER_RESET_EVENT_KEYS = ['MEDIA_DETACHING', 'BUFFER_RESET'];
 const HLS_EVENT_KEYS = [
   'FRAG_LOADING',
   'FRAG_LOADED',
@@ -71,29 +83,6 @@ type LastFragmentInfo = {
 type LastFragmentsByStream = Record<string, LastFragmentInfo>;
 
 type FailureCounts = Record<FailureCategory, number>;
-
-type FragLoadStage = {
-  status: 'loading' | 'loaded' | 'aborted';
-  level?: number;
-  height?: number;
-  sn?: number | string;
-  startedAt: number;
-  durationSeconds?: number;
-};
-
-// Keyed by `frag.type` ('main' | 'audio' | 'subtitle'): main and audio fragments load concurrently
-// on streams with alternate audio, so a single shared stage would let one hide a stall in the other.
-type FragLoadStagesByStream = Record<string, FragLoadStage>;
-
-type BufferAppendStage = {
-  status: 'appending' | 'appended';
-  startedAt: number;
-  durationSeconds?: number;
-};
-
-// Keyed by the SourceBuffer type ('video' | 'audio' | 'audiovideo') for the same reason: video and
-// audio buffers append independently, so one completing must not hide a stall in the other.
-type BufferAppendStagesByType = Record<string, BufferAppendStage>;
 
 type PlaybackSnapshot = {
   /** Sentry `playback_id` for this attempt; searchable as `playback_id:XXXXXX`. */
@@ -509,55 +498,6 @@ function formatFragmentIdentity(frag: any, hls: HLS) {
   return sn !== undefined && sn !== null ? `${label}, sn ${sn}` : label;
 }
 
-function formatFragLoadStageValue(stage: FragLoadStage, streamType: string) {
-  const identity = stage.height
-    ? `${stage.height}p`
-    : stage.level !== undefined
-    ? streamType === 'main'
-      ? `level ${stage.level}`
-      : `track ${stage.level}`
-    : 'unknown level';
-  const snLabel = stage.sn !== undefined && stage.sn !== null ? `, sn ${stage.sn}` : '';
-
-  if (stage.status === 'loading') {
-    return `${identity}${snLabel} - loading (${formatSeconds((Date.now() - stage.startedAt) / 1000)})`;
-  }
-
-  if (stage.status === 'aborted') {
-    return `${identity}${snLabel} - aborted (low bandwidth)`;
-  }
-
-  return `${identity}${snLabel} - loaded in ${formatSeconds(stage.durationSeconds)}`;
-}
-
-function formatFragLoadStages(stages: FragLoadStagesByStream) {
-  const entries = Object.entries(stages);
-
-  if (!entries.length) {
-    return 'idle';
-  }
-
-  return entries.map(([streamType, stage]) => `${streamType}: ${formatFragLoadStageValue(stage, streamType)}`).join('; ');
-}
-
-function formatBufferAppendStageValue(stage: BufferAppendStage) {
-  if (stage.status === 'appending') {
-    return `appending (${formatSeconds((Date.now() - stage.startedAt) / 1000)})`;
-  }
-
-  return `appended in ${formatSeconds(stage.durationSeconds)}`;
-}
-
-function formatBufferAppendStages(stages: BufferAppendStagesByType) {
-  const entries = Object.entries(stages);
-
-  if (!entries.length) {
-    return 'idle';
-  }
-
-  return entries.map(([bufferType, stage]) => `${bufferType}: ${formatBufferAppendStageValue(stage)}`).join('; ');
-}
-
 function formatFragmentLevel(fragment: LastFragmentInfo) {
   if (fragment.height) {
     return `${fragment.height}p`;
@@ -669,7 +609,7 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
   const [encoded, setEncoded] = useState<Nullable<EncodedCapture>>(null);
   const [encodeError, setEncodeError] = useState<Nullable<string>>(null);
   const nextHistoryId = useRef(1);
-  const pendingAppendStarts = useRef<Map<string, number>>(new Map());
+  const pendingAppendStarts = useRef<PendingAppends>(new Map());
   const previousHlsSource = useRef<Nullable<HlsSourceState<HLS>>>(null);
 
   const pushHistory = useCallback((source: DiagnosticHistoryItem['source'], name: string, details?: string) => {
@@ -838,24 +778,16 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
 
         if (key === 'BUFFER_APPENDING') {
           const bufferType = typeof data?.type === 'string' ? data.type : 'unknown';
+          const stage = startAppend(pendingAppends, bufferType, data?.chunkMeta, Date.now());
 
-          pendingAppends.set(bufferType, Date.now());
-          setBufferAppendStages((stages) => ({ ...stages, [bufferType]: { status: 'appending', startedAt: Date.now() } }));
+          setBufferAppendStages((stages) => ({ ...stages, [bufferType]: stage }));
         }
 
         if (key === 'BUFFER_APPENDED') {
           const bufferType = typeof data?.type === 'string' ? data.type : 'unknown';
-          const startedAt = pendingAppends.get(bufferType);
+          const stage = completeAppend(pendingAppends, bufferType, data?.chunkMeta, Date.now());
 
-          pendingAppends.delete(bufferType);
-          setBufferAppendStages((stages) => ({
-            ...stages,
-            [bufferType]: {
-              status: 'appended',
-              startedAt: startedAt ?? Date.now(),
-              durationSeconds: startedAt !== undefined ? (Date.now() - startedAt) / 1000 : undefined,
-            },
-          }));
+          setBufferAppendStages((stages) => ({ ...stages, [bufferType]: stage }));
         }
 
         if (key === 'LEVEL_SWITCHED') {
@@ -875,13 +807,26 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
       return { eventName, handler };
     }).filter(({ eventName }) => Boolean(eventName));
 
+    // Not in HLS_EVENT_KEYS, so Recent Events does not change.
+    const bufferResetHandler = () => {
+      resetAppends(pendingAppends);
+      setBufferAppendStages({});
+    };
+    const bufferResetEventNames = HLS_BUFFER_RESET_EVENT_KEYS.map((key) => hlsEvents[key]).filter(Boolean);
+
     handlers.forEach(({ eventName, handler }) => {
       (hls as any).on(eventName, handler);
+    });
+    bufferResetEventNames.forEach((eventName) => {
+      (hls as any).on(eventName, bufferResetHandler);
     });
 
     return () => {
       handlers.forEach(({ eventName, handler }) => {
         (hls as any).off(eventName, handler);
+      });
+      bufferResetEventNames.forEach((eventName) => {
+        (hls as any).off(eventName, bufferResetHandler);
       });
       pendingAppends.clear();
     };
@@ -999,8 +944,8 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
         : undefined,
       lastFragments: Object.keys(exportedLastFragments).length ? exportedLastFragments : undefined,
       pipeline: {
-        load: formatFragLoadStages(fragLoadStages),
-        append: formatBufferAppendStages(bufferAppendStages),
+        load: formatFragLoadStages(fragLoadStages, 'detailed'),
+        append: formatBufferAppendStages(bufferAppendStages, 'detailed'),
         emergencyAborts: emergencyAbortCount,
       },
       failures: {
@@ -1153,14 +1098,14 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
                   'text-yellow-300': Object.values(fragLoadStages).some((stage) => stage.status === 'loading'),
                 })}
               >
-                load: {formatFragLoadStages(fragLoadStages)}
+                load: {formatFragLoadStages(fragLoadStages, 'compact')}
               </div>
               <div
                 className={cx({
                   'text-yellow-300': Object.values(bufferAppendStages).some((stage) => stage.status === 'appending'),
                 })}
               >
-                append: {formatBufferAppendStages(bufferAppendStages)}
+                append: {formatBufferAppendStages(bufferAppendStages, 'compact')}
               </div>
               <div>emergency aborts: {emergencyAbortCount}</div>
             </section>

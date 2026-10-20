@@ -731,7 +731,9 @@ which now records it.
 - **Confidence:** code — high.
 - **Validation and acceptance criteria:** Take a capture on a stream with alternate audio; the
   decoded report shows both streams and matches the screen. Switch quality, capture, and confirm the
-  seam is visible in the decoded event list.
+  seam is visible in the decoded event list. "Matches" means the same information, not the same
+  wording: since #89 (issue #38) the overlay's Segment Pipeline lines are compact, while the capture
+  keeps the detailed form with fragment numbers (`docs/playback-diagnostics-spec.md`, Segment Loading).
 - **Estimated scope:** Small–medium; three files must move together.
 
 ### A9 — Bound API requests, and stop Back from waiting on one
