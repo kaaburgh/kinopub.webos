@@ -245,8 +245,7 @@ function useVideoPlayer({
   const latestHlsErrorRef = useRef<LatestHlsError | undefined>();
   const currentAudioTrackIndexRef = useRef(0);
   // Decode health is sampled continuously, not only while the diagnostics overlay is open, because
-  // the indicator it drives is the whole point: a viewer should not have to open diagnostics to
-  // learn the decoder is struggling.
+  // the `decode-health-severe` log has to fire whether or not anyone is looking at the overlay.
   const decodeSamplesRef = useRef<DecodeSample[]>([]);
   const decodeErrorTimesRef = useRef<number[]>([]);
   const decodeHealthRef = useRef<DecodeHealth>(EMPTY_DECODE_HEALTH);
@@ -607,7 +606,7 @@ function useVideoPlayer({
         });
 
         hls.on(HLS.Events.ERROR, (_event, data: any) => {
-          // Decode failures count towards the health indicator whether or not they are fatal.
+          // Decode failures count towards decode health whether or not they are fatal.
           // Non-fatal ones matter most: hls.js absorbs them silently, so without this nothing
           // surfaces a decoder that is quietly rejecting data.
           const category = getFailureCategory(data);
@@ -1160,8 +1159,8 @@ function useVideoPlayer({
       ).getVideoPlaybackQuality;
       const now = Date.now();
 
-      // Older webOS firmware may not implement it; the error count alone still drives the
-      // indicator there.
+      // Older webOS firmware may not implement it; the error count alone still drives decode
+      // health there.
       if (getQuality) {
         const quality = getQuality.call(video);
         const totalVideoFrames = quality?.totalVideoFrames;

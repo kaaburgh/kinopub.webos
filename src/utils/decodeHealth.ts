@@ -1,5 +1,5 @@
 /**
- * Decode-health scoring for the playback indicator.
+ * Decode-health scoring for the diagnostics overlay and the `decode-health-severe` log.
  *
  * There is no normative threshold for "the decoder is struggling", but there is a settled *metric*:
  * the dropped-frame ratio from `HTMLVideoElement.getVideoPlaybackQuality()`, which the W3C Media
