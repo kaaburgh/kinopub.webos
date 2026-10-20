@@ -217,6 +217,22 @@ purpose of the pipeline view.
 This separates "waiting on the network for a fragment" from "waiting on the media pipeline to accept a
 fragment it already has", which the two combined event types on their own do not make clear.
 
+The overlay and the QR capture render the same stages differently. The overlay column is narrow and
+read off a television, so it shows a compact line that names each stream or buffer once:
+`load: 2160p 0.4s · audio 0.1s` and `append: video 0.2s · audio 0.1s`, with `pending` after the elapsed
+time of a stage still in progress (`video 12.3s pending`) and `aborted` for an emergency abort. The main
+stream is named by its quality, so the track and fragment number are left to Last Fragment and Recent
+Events. The capture keeps the detailed form, fragment numbers included
+(`main: 2160p, sn 1234 - loaded in 0.4 s; audio: track 0, sn 1234 - loaded in 0.1 s`), so it still
+carries everything the screen shows. Both come from `src/components/player/segmentPipeline.ts`.
+
+Append stages are matched to their completion by the `chunkMeta` hls.js passes with both
+`BUFFER_APPENDING` and `BUFFER_APPENDED`. One start time per buffer type is not enough. hls.js queues
+the init segment and the fragment data for the same type back to back, so a single slot showed
+`appended` while the data was still being written, then `n/a`. hls.js runs each type's queue in order
+and drops a failed or reset append without a completion event, so a completion also discards every
+append queued before it.
+
 ## Errors
 
 Record recent HLS errors in the same bounded diagnostics history.
