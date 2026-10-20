@@ -3,6 +3,7 @@ import { serialize } from 'object-to-formdata';
 
 import { isAuthorizationPollingGrant, shouldReportHttpStatus } from 'utils/apiFailures';
 import { logApiFailure } from 'utils/logging';
+import { ApiAnswer } from 'utils/sessionRenewal';
 
 type Primitive = string | number | boolean;
 
@@ -88,8 +89,24 @@ class BaseApiClient {
    * decide whether pairing is still pending — so this reports failures *beside* the existing
    * behaviour rather than reshaping it. Turning a non-2xx into a thrown error would be a larger
    * change than it looks, since the backend answers some of them with a body the app uses.
+   *
+   * A 401 is an expired access token far more often than an ended session, so it is renewed once and
+   * the request repeated. It used to clear every token on the spot, which turned the first request
+   * after the access token lapsed — typically the first one after the TV came back on — into a new
+   * pairing. Whether the session survives is now decided by the renewal, not by the 401.
    */
-  private async request<T>(method: 'GET' | 'POST', url: string, params?: Params, data?: Params) {
+  private async request<T>(method: 'GET' | 'POST', url: string, params?: Params, data?: Params, isRetry = false): Promise<T> {
+    const answer = await this.send<T>(method, url, params, data);
+
+    if (answer.status === 401 && !params?.['grant_type'] && !isRetry && (await this.renewAfterUnauthorized())) {
+      return this.request<T>(method, url, params, data, true);
+    }
+
+    return answer.body;
+  }
+
+  /** One request, with the status kept so the OAuth flow can tell a refusal from an outage. */
+  private async send<T>(method: 'GET' | 'POST', url: string, params?: Params, data?: Params): Promise<ApiAnswer<T>> {
     const accessToken = this.getAccessToken();
     const grantType = params?.['grant_type'];
     // Two different questions, deliberately not the same predicate. *Any* OAuth request must go out
@@ -120,12 +137,11 @@ class BaseApiClient {
       logApiFailure({ kind: 'unreachable', endpoint: url, method, reason: (ex as Error)?.message });
 
       return {
-        error: (ex as Error).toString(),
-      } as unknown as T;
-    }
-
-    if (response.status === 401) {
-      this.clearTokens();
+        body: {
+          error: (ex as Error).toString(),
+        } as unknown as T,
+        parsed: false,
+      };
     }
 
     if (shouldReportHttpStatus(response.status, { isAuthorizationPolling })) {
@@ -135,7 +151,7 @@ class BaseApiClient {
     try {
       const json = await response.json();
 
-      return json as T;
+      return { body: json as T, status: response.status, parsed: true };
     } catch (ex) {
       // Answered, but not with JSON. An HTML error page from something in front of the API is the
       // usual cause, and until now it surfaced as an indistinguishable `{ error }` with the status
@@ -143,8 +159,12 @@ class BaseApiClient {
       logApiFailure({ kind: 'malformed', endpoint: url, method, status: response.status, reason: (ex as Error)?.message });
 
       return {
-        error: (ex as Error).toString(),
-      } as unknown as T;
+        body: {
+          error: (ex as Error).toString(),
+        } as unknown as T,
+        status: response.status,
+        parsed: false,
+      };
     }
   }
 
@@ -154,6 +174,19 @@ class BaseApiClient {
 
   protected post<T>(url: string, data?: Params, params?: Params) {
     return this.request<T>('POST', url, params, data);
+  }
+
+  /** `post` for the OAuth grants, which need the status as well as the body. */
+  protected postForAnswer<T>(url: string, data?: Params, params?: Params) {
+    return this.send<T>('POST', url, params, data);
+  }
+
+  /**
+   * Called when a request is answered 401. Resolves true when the session was renewed and the
+   * request is worth repeating. Without an implementation the 401 is simply returned to the caller.
+   */
+  protected renewAfterUnauthorized(): Promise<boolean> {
+    return Promise.resolve(false);
   }
 
   protected getAccessToken(): string {

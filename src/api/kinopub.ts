@@ -42,6 +42,35 @@ import {
   WatchingToggleWatchlistResponse,
 } from './typings';
 
+import { ApiAnswer, SessionRenewal, classifySessionRenewal, isTransientAnswer, retryDelayMs } from 'utils/sessionRenewal';
+
+/**
+ * The renewal in flight, shared by every client instance.
+ *
+ * Each hook creates its own `ApiClient`, but the tokens they use are process-wide. Two renewals with
+ * the same refresh token race: if the backend accepts a refresh token once, the second is refused and
+ * would end the session the first had just renewed. Startup and every request answered 401 join the
+ * same renewal instead.
+ */
+let renewalInFlight: Promise<SessionRenewal> | null = null;
+
+/**
+ * Waits before the next attempt, or until the browser reports the network is back, whichever is
+ * first. Process-wide lifetime is bounded by the delay, and the listener is removed either way.
+ */
+function waitForRetry(attempt: number) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('online', done);
+      resolve();
+    };
+    const timeoutId = setTimeout(done, retryDelayMs(attempt));
+
+    window.addEventListener('online', done);
+  });
+}
+
 const KINOPUB_API_BASE_URL = process.env.KINOPUB_API_BASE_URL || 'https://api.service-kp.com';
 const KINOPUB_API_CLIENT_ID = process.env.KINOPUB_API_CLIENT_ID || 'xbmc';
 const KINOPUB_API_CLIENT_SECRET = process.env.KINOPUB_API_CLIENT_SECRET || 'cgg3gtifu46urtfp2zp1nqtba0k2ezxh';
@@ -70,8 +99,9 @@ class KinopubApiClient extends BaseApiClient {
     this.accessTokenCheckIntervaId = null;
   }
 
-  private async processTokensReponse(response: TokensResponse, deviceInfo: DeviceInfo, onSuccess?: Function) {
-    await this.clearTokens();
+  /** Handles one answer to the pairing poll. */
+  private async processTokensReponse(answer: ApiAnswer<TokensResponse>, deviceInfo: DeviceInfo, onSuccess?: Function) {
+    const response = answer.body;
 
     switch (response.error) {
       case 'authorization_pending':
@@ -86,6 +116,12 @@ class KinopubApiClient extends BaseApiClient {
         return;
 
       default:
+        // A poll that failed in transit says nothing about the code on screen. Giving up here used to
+        // restart pairing, replacing the code while the viewer may have been typing it.
+        if (isTransientAnswer(answer)) {
+          break;
+        }
+
         this.clearTimers();
         throw response.error;
     }
@@ -105,10 +141,10 @@ class KinopubApiClient extends BaseApiClient {
     return new Promise<void>((resolve, reject) => {
       this.clearTimers();
       this.accessTokenCheckIntervaId = setInterval(async () => {
-        const response = await this.requestTokens(code);
+        const answer = await this.requestTokens(code);
 
         try {
-          await this.processTokensReponse(response, deviceInfo, resolve);
+          await this.processTokensReponse(answer, deviceInfo, resolve);
         } catch (ex) {
           reject(ex);
         }
@@ -117,33 +153,76 @@ class KinopubApiClient extends BaseApiClient {
   }
 
   /**
+   * Renews the session with the stored refresh token. Concurrent callers share one request.
+   *
+   * Tokens are cleared only when the backend refuses the renewal; an outage leaves them in place.
+   */
+  renewSession(): Promise<SessionRenewal> {
+    if (!renewalInFlight) {
+      renewalInFlight = this.requestSessionRenewal().then(
+        (renewal) => {
+          renewalInFlight = null;
+          return renewal;
+        },
+        (error) => {
+          renewalInFlight = null;
+          throw error;
+        },
+      );
+    }
+
+    return renewalInFlight;
+  }
+
+  private async requestSessionRenewal(): Promise<SessionRenewal> {
+    const refreshToken = this.getRefreshToken();
+
+    if (!refreshToken) {
+      // Nothing to renew with: an access token alone cannot be brought back.
+      await this.clearTokens();
+      return 'rejected';
+    }
+
+    const answer = await this.refreshTokens(refreshToken);
+    const renewal = classifySessionRenewal(answer);
+
+    if (renewal === 'renewed') {
+      await this.saveTokens(answer.body);
+    } else if (renewal === 'rejected') {
+      await this.clearTokens();
+    }
+
+    return renewal;
+  }
+
+  protected async renewAfterUnauthorized() {
+    return (await this.renewSession()) === 'renewed';
+  }
+
+  /**
    * Получение access_token и refresh_token
    * @param code Код для получения access_token и refresh_token
    */
-  async requestTokens(code: string) {
-    const response = await this.post<TokensResponse>(`/oauth2/device`, null, {
+  private requestTokens(code: string) {
+    return this.postForAnswer<TokensResponse>(`/oauth2/device`, null, {
       grant_type: 'device_token',
       client_id: this.clientId,
       client_secret: this.clientSecret,
       code,
     });
-
-    return response;
   }
 
   /**
    * Обновление access_token и refresh_token
    * @param refresh_token Код для обновления access_token и refresh_token
    */
-  async refreshTokens(refresh_token: string) {
-    const response = await this.post<TokensResponse>(`/oauth2/token`, null, {
+  private refreshTokens(refresh_token: string) {
+    return this.postForAnswer<TokensResponse>(`/oauth2/token`, null, {
       grant_type: 'refresh_token',
       client_id: this.clientId,
       client_secret: this.clientSecret,
       refresh_token,
     });
-
-    return response;
   }
 
   /**
@@ -165,17 +244,31 @@ class KinopubApiClient extends BaseApiClient {
   async deviceAuthorization(deviceInfo: DeviceInfo, onConfirm?: OnConfirm): Promise<void> {
     this.clearTimers();
 
-    const refreshToken = this.getRefreshToken();
+    // Every attempt starts from the stored session, because another authorization may have paired
+    // or renewed while this one waited. Keep the session for as long as the backend has not refused
+    // it, and wait for a renewal even while the access token is valid: starting without the network
+    // would send the first screen's requests into it, and `useApi` caches their `{ error }` bodies as
+    // data that is not fetched again once the network is back.
+    for (let attempt = 0; ; attempt += 1) {
+      if (this.getRefreshToken()) {
+        const renewal = await this.renewSession();
 
-    if (refreshToken) {
-      const response = await this.refreshTokens(refreshToken);
+        if (renewal === 'renewed') {
+          await this.deviceNotify(deviceInfo);
+          return;
+        }
 
-      return this.processTokensReponse(response, deviceInfo);
-    } else {
+        if (renewal === 'unavailable') {
+          await waitForRetry(attempt);
+          continue;
+        }
+      }
+
       try {
         return await this.requestUserCode(deviceInfo, onConfirm);
       } catch (ex) {
-        return this.deviceAuthorization(deviceInfo, onConfirm);
+        // Retrying at once used to spin as fast as requests could fail while the network was down.
+        await waitForRetry(attempt);
       }
     }
   }
