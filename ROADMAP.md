@@ -779,6 +779,43 @@ which now records it.
   These two real-network observations remain outstanding.
 - **Estimated scope:** Small.
 
+### A24 — Let the pairing screen be opened from a phone
+
+> **Implemented, validation incomplete.** The pairing screen shows a QR code for the verification
+> address the API returned (`https://kino.pub/device` when it returned none), next to the unchanged
+> text. Scanning it opens the page on a phone; the code is still typed by hand. The QR rendering that
+> `DiagnosticsQr` used is now the shared `components/qrCode`, so both screens keep the same
+> TV-specific rules (one `<img>`, no canvas, nearest-neighbour scaling). **Not yet scanned from a TV
+> screen.**
+
+- **Status:** Completed, validation incomplete
+- **Depends on:** None
+- **Priority:** Low
+- **Category:** Authorization UX
+- **Origin:** Maintainer request, alongside **A23**.
+- **Problem or opportunity:** Pairing means reading an address off the television and typing it on
+  another device. A phone camera can open the page directly.
+- **Concrete evidence:** code — `src/views/pair/pair.tsx` rendered the address and code as text only.
+  runtime — `src/views/pair/pair.test.tsx` checks the QR payload is the address (or the default)
+  and never the code; `src/components/qrCode/qrCode.test.tsx` checks both encoding modes render one
+  GIF image and an oversized payload falls back to text. A one-off check outside the repository
+  decoded the module matrix `qrcode-generator` builds for `https://kino.pub/device` with `jsqr`:
+  version 2 (25×25 modules), decodes to the same address. The production build, served locally with
+  the KinoPub API stubbed in headless Chromium (`chromium_headless_shell-1194`, not Chrome 35), reaches
+  `/pair` on its own and renders the code at 280 px.
+- **Open question / next experiment:** whether KinoPub's device page accepts the code in its URL. If
+  it does, the QR could carry the code and scanning would replace typing. Unknown: the site was not
+  reachable from the agent environment, and nothing in this repository documents such a parameter.
+  Do not encode the code until that is established on the real page.
+- **Compatibility risks:** Low. Reuses the approved `qrcode-generator` dependency; no new browser APIs.
+  `DiagnosticsQr` output is unchanged (same error-correction level, mode selection, cell size and
+  margin).
+- **Confidence:** code/runtime — high. device — not established.
+- **Validation and acceptance criteria:** On the LG G5 pairing screen, a phone camera at normal
+  viewing distance recognises the code and opens the verification page; the diagnostics QR capture
+  still decodes with `scripts/decode-diagnostics.js`.
+- **Estimated scope:** Small.
+
 ### A10 — Add a render error boundary
 
 > **Implemented, validation incomplete.** `ErrorBoundary` now wraps `Views` in `App/App.tsx`, catches

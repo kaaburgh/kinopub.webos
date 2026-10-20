@@ -22,7 +22,8 @@ Runtime dependencies were originally frozen outright. That rule is now narrowed:
 Enact/webOS, TypeScript, and `hls.js` versions still must not move, but a small, self-contained
 dependency may be added when it is the only thing standing between the diagnostics and a usable
 workflow. The single approved addition so far is `qrcode-generator`, used by the capture export
-below; it pulls in no transitive dependencies and touches nothing on the playback path.
+below; it pulls in no transitive dependencies and touches nothing on the playback path. Its
+rendering lives in the shared `src/components/qrCode`, which the pairing screen also uses.
 
 ## Entry Point
 
