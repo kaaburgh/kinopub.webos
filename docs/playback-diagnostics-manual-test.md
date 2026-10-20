@@ -204,17 +204,11 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
   passes the position to `startLoad()`, which matters because `onManifestLoading` resets hls.js's
   own start position to zero.
 
-## Decode Health Indicator
+## Decode Health
 
-- During clean playback, confirm no badge is shown at the top left.
-- On content that stutters, confirm a badge appears below the title row reading
-  `Пропуск кадров N%`, yellow from 1% and red from 5%.
-- Confirm it disappears again once playback is clean for the length of the window (30 s).
-- Confirm the badge is hidden while the diagnostics overlay or the QR export is open.
-- Confirm it never intercepts the remote: pressing directions/OK must behave exactly as without it.
-- If a decoder error occurs, confirm the badge reads `Ошибки декодера ×N` instead, and that the
-  `media/decode` counter in `Failure Summary` moves by the same amount — the two read the same
-  categorisation and must agree.
+- During playback, confirm nothing decode-related is drawn over the video, including on content that
+  stutters or hits decoder errors. The former corner badge was removed on purpose.
+- Decode health is read from the diagnostics overlay only; see the spec's Decode Health section.
 
 ## Playback Failure Notice
 
