@@ -5,6 +5,7 @@ import {
   completeAppend,
   formatBufferAppendStages,
   formatFragLoadStages,
+  resetAppends,
   startAppend,
 } from './segmentPipeline';
 
@@ -114,6 +115,19 @@ describe('pending appends', () => {
     // The queue runs in order, so the first is gone once the second completes.
     expect(completeAppend(pending, 'video', next, 5300)).toEqual({ status: 'appended', startedAt: 5000, durationSeconds: 0.3 });
     expect(pending.size).toBe(0);
+  });
+
+  it('times appends after a buffer reset from their own start', () => {
+    const pending: PendingAppends = new Map();
+    const discarded = chunk(1);
+    const next = chunk(2);
+
+    // recoverMediaError() mid-append: hls.js drops the queued append with its SourceBuffers.
+    startAppend(pending, 'video', discarded, 1000);
+    resetAppends(pending);
+
+    expect(startAppend(pending, 'video', next, 9000)).toEqual({ status: 'appending', startedAt: 9000 });
+    expect(completeAppend(pending, 'video', next, 9200)).toEqual({ status: 'appended', startedAt: 9000, durationSeconds: 0.2 });
   });
 
   it('cannot time an append whose start it never saw', () => {

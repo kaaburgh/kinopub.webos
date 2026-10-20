@@ -17,6 +17,7 @@ import {
   completeAppend,
   formatBufferAppendStages,
   formatFragLoadStages,
+  resetAppends,
   startAppend,
 } from './segmentPipeline';
 
@@ -28,6 +29,8 @@ import { getPlaybackSessionId } from 'utils/logging';
 
 const HISTORY_LIMIT = 30;
 const VIDEO_EVENTS = ['playing', 'waiting', 'stalled', 'canplay', 'canplaythrough', 'seeking', 'seeked', 'error', 'ended'];
+// hls.js discards its SourceBuffers on these without reporting the appends it drops with them.
+const HLS_BUFFER_RESET_EVENT_KEYS = ['MEDIA_DETACHING', 'BUFFER_RESET'];
 const HLS_EVENT_KEYS = [
   'FRAG_LOADING',
   'FRAG_LOADED',
@@ -804,13 +807,26 @@ function PlaybackDiagnosticsOverlay({ visible, exportVisible, onExportToggle, pl
       return { eventName, handler };
     }).filter(({ eventName }) => Boolean(eventName));
 
+    // Not in HLS_EVENT_KEYS, so Recent Events does not change.
+    const bufferResetHandler = () => {
+      resetAppends(pendingAppends);
+      setBufferAppendStages({});
+    };
+    const bufferResetEventNames = HLS_BUFFER_RESET_EVENT_KEYS.map((key) => hlsEvents[key]).filter(Boolean);
+
     handlers.forEach(({ eventName, handler }) => {
       (hls as any).on(eventName, handler);
+    });
+    bufferResetEventNames.forEach((eventName) => {
+      (hls as any).on(eventName, bufferResetHandler);
     });
 
     return () => {
       handlers.forEach(({ eventName, handler }) => {
         (hls as any).off(eventName, handler);
+      });
+      bufferResetEventNames.forEach((eventName) => {
+        (hls as any).off(eventName, bufferResetHandler);
       });
       pendingAppends.clear();
     };

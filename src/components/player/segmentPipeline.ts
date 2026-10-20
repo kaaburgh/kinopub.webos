@@ -126,7 +126,8 @@ type PendingAppend = {
  * append that fails, or is discarded when the buffer is reset, is dropped from hls.js's queue without
  * a BUFFER_APPENDED, so it would sit at the head forever. hls.js runs each type's queue strictly in
  * order, so when an append completes, everything queued before it has finished one way or another —
- * which is what lets `completeAppend` discard those without knowing why they went.
+ * which is what lets `completeAppend` discard those without knowing why they went. That ordering
+ * only holds within one set of SourceBuffers, though; see `resetAppends`.
  */
 export type PendingAppends = Map<string, PendingAppend[]>;
 
@@ -159,4 +160,16 @@ export function completeAppend(pending: PendingAppends, bufferType: string, chun
     startedAt: startedAt ?? now,
     durationSeconds: startedAt !== undefined ? (now - startedAt) / 1000 : undefined,
   };
+}
+
+/**
+ * Forget every pending append because hls.js has thrown its SourceBuffers away.
+ *
+ * hls.js 1.0.10 rebuilds the buffers and their operation queue without a BUFFER_APPENDED for what
+ * was queued: on MEDIA_DETACHING (which `recoverMediaError()` goes through) and on BUFFER_RESET
+ * (a new `loadSource()`). The same hls.js instance carries on, so nothing else clears the queue, and
+ * an append left in it would keep timing the next one from when the discarded append started.
+ */
+export function resetAppends(pending: PendingAppends) {
+  pending.clear();
 }

@@ -233,6 +233,11 @@ the init segment and the fragment data for the same type back to back, so a sing
 and drops a failed or reset append without a completion event, so a completion also discards every
 append queued before it.
 
+When hls.js throws its SourceBuffers away, on `MEDIA_DETACHING` (which `recoverMediaError()` goes
+through) and on `BUFFER_RESET` (a new `loadSource()`), every pending append is forgotten and the
+append line returns to `idle`. The same hls.js instance carries on after both, so without this the
+next append would be timed from when the discarded one started and show a false long `pending`.
+
 ## Errors
 
 Record recent HLS errors in the same bounded diagnostics history.
