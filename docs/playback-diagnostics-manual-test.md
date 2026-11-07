@@ -52,11 +52,15 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
 
 ## Segment Pipeline
 
-- While playback runs normally, confirm the `Segment Pipeline` section alternates between `load: ... loading`
-  and `load: ... loaded in Ns`, and similarly for `append`, roughly once per fragment.
+- While playback runs normally, confirm the `Segment Pipeline` `load` and `append` lines alternate between
+  an elapsed time followed by `pending` (`load: 2160p 0.3s pending`) and a completed duration
+  (`load: 2160p 0.4s`, `append: video 0.2s · audio 0.1s`), roughly once per fragment.
+- Confirm both lines fit on one line of the diagnostics column, including on a stream with alternate audio.
+- Confirm a decoded QR capture shows the same stages in the detailed form (`main: 2160p, sn … - loaded in …`).
 - Confirm `emergency aborts` stays at `0` during normal playback.
 - If a level switch is forced under changing bandwidth, confirm `emergency aborts` increments only when
-  HLS.js actually aborts an in-flight fragment load, and that the load stage shows `aborted (low bandwidth)`.
+  HLS.js actually aborts an in-flight fragment load, and that the load stage shows `aborted` (in the QR
+  capture: `aborted (low bandwidth)`).
 
 ## Network Interruption
 
@@ -65,7 +69,7 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
 - Confirm the `Failure Summary` section increments the `network` counter for connectivity/load failures, and
   that `last` reflects the most recent failure category and its age.
 - Confirm the `Segment Pipeline` load stage reflects a stalled/retrying fragment load during the interruption
-  (elapsed loading time keeps increasing instead of completing).
+  (the elapsed time before `pending` keeps increasing instead of completing).
 - Confirm any request location shows hostname only, not full URLs or query parameters.
 - Restore connectivity and observe whether successful fragment information updates.
 
