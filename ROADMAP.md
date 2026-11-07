@@ -190,8 +190,8 @@ If a source cannot adapt in place, treat switching to another source URL as a se
   until captures show what the decode failure actually looks like.
 - **Badge removed (maintainer decision).** The score originally also drove an on-screen corner badge
   (`Пропуск кадров N%` / `Ошибки декодера ×N`). On the TV it proved distracting rather than useful,
-  so it was removed. The score still feeds the diagnostics overlay and the `decode-health-severe`
-  log.
+  so it was removed. The score still feeds the QR capture and the `decode-health-severe` log; it
+  is no longer shown on screen anywhere, since the overlay's `Decode Quality` panel is cumulative.
 
 ### 5. P1 — Reduce excessive subtitle brightness, especially in HDR
 
@@ -556,8 +556,8 @@ Ordered by priority, then by what unblocks what.
 - **Problem or opportunity:** The decode-health thresholds are reasoned, not measured. If the
   panel's baseline dropped-frame ratio during clean playback is above 1%, the score is permanently
   `warning` and means nothing; if it never reaches 1% even while visibly stuttering, it never fires.
-  (The on-screen badge it used to drive has been removed; the score still feeds the overlay and the
-  `decode-health-severe` log, and gates **A13**.)
+  (The on-screen badge it used to drive has been removed; the score still feeds the QR capture and
+  the `decode-health-severe` log, and gates **A13**.)
 - **Concrete evidence:** `DECODE_WARNING_RATIO = 0.01` / `DECODE_SEVERE_RATIO = 0.05`
   (`decodeHealth.ts:48-49`), with the module itself stating there is no normative threshold
   (`:4-5`). `DECODE_MIN_FRAMES = 120` and the 30 s window are equally unmeasured. Nothing in the
@@ -728,7 +728,7 @@ which now records it.
   stream tag; the decoder skips unknown lines by design, so a `FORMAT_VERSION` bump plus a matching
   `scripts/decode-diagnostics.js` change in the same commit is the contract). For history, prefer a
   `source changed` marker over clearing — history across a switch is often what you want to see, as
-  long as the seam is visible. Also add the decode-health severity, which the overlay shows and the
+  long as the seam is visible. Also add the decode-health severity, which the badge shows and the
   capture does not.
 - **Dependencies and sequencing:** None.
 - **Compatibility risks:** Low, but the format is versioned for a reason: encoder and decoder must

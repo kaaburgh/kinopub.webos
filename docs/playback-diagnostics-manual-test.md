@@ -208,7 +208,9 @@ Use this checklist on an LG webOS TV after installing a build that includes the 
 
 - During playback, confirm nothing decode-related is drawn over the video, including on content that
   stutters or hits decoder errors. The former corner badge was removed on purpose.
-- Decode health is read from the diagnostics overlay only; see the spec's Decode Health section.
+- The severity is not shown on screen at all, including in the overlay, whose `Decode Quality` panel
+  is cumulative. To read it, take a QR capture and check `severity=` on the decoded `decode:` line;
+  see the spec's Decode Health section.
 
 ## Playback Failure Notice
 

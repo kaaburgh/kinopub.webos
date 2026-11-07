@@ -355,13 +355,16 @@ recovery state is carried on the `r|` line for this reason.
 
 ## Decode Health
 
-A severity score for whether the decoder is visibly struggling. It is shown in the diagnostics
-overlay and logged as `decode-health-severe` when it turns severe. It never lowers quality, reloads,
-or otherwise acts on the problem.
+A severity score for whether the decoder is visibly struggling. It is carried in the QR capture
+(the severity field on the `q|` line) and logged as `decode-health-severe` when it turns severe. It
+never lowers quality, reloads, or otherwise acts on the problem.
+
+The score itself is not drawn on screen. The overlay's `Decode Quality` panel shows the element's
+_cumulative_ frame counters and dropped percentage, not the windowed ratio or the severity below.
 
 There used to be an on-screen corner badge driven by this score (`Пропуск кадров N%` /
 `Ошибки декодера ×N`). It was removed at the maintainer's request: in practice it was distracting
-rather than useful during viewing. The scoring, the overlay readout and the log are unchanged.
+rather than useful during viewing. The scoring, the QR capture field and the log are unchanged.
 
 ### Metric
 
@@ -388,8 +391,8 @@ Hard decode errors are tracked in the same window and escalate independently —
 three are severe. They are qualitatively worse than a dropped frame: a dropped frame is late, while
 `bufferAppendError` or `fragParsingError` means the decoder rejected the data outright. Non-fatal
 ones matter most, because hls.js absorbs them silently and nothing else reports them. The
-categorisation is shared between scoring and the overlay's failure summary via `src/utils/hlsFailures.ts` so the two can never
-disagree.
+categorisation is shared between scoring and the overlay's failure summary via
+`src/utils/hlsFailures.ts` so the two can never disagree.
 
 ### Guards against false positives
 
