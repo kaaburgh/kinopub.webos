@@ -1,9 +1,9 @@
 /**
  * Shared categorisation of hls.js `ERROR` events.
  *
- * Both the diagnostics overlay and the decode-health indicator classify failures, and they have to
- * agree: an indicator warning about the decoder while the overlay reports `media/decode: 0` would
- * be worse than no indicator at all.
+ * Both the diagnostics overlay and decode-health scoring classify failures, and they have to agree:
+ * a `decode-health-severe` log blaming the decoder while the overlay reports `media/decode: 0` would
+ * be worse than no signal at all.
  */
 
 export type FailureCategory = 'network' | 'buffer' | 'media' | 'other';

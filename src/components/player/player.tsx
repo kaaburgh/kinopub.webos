@@ -11,14 +11,12 @@ import Text from 'components/text';
 import useButtonEffect from 'hooks/useButtonEffect';
 import useStorageState from 'hooks/useStorageState';
 
-import DecodeHealthIndicator from './decodeHealthIndicator';
 import { getVideoNode } from './getVideoNode';
 import PlaybackDiagnosticsOverlay from './playbackDiagnostics';
 import PlaybackFailureNotice from './playbackFailureNotice';
 import Settings, { SUBTITLE_OPACITY_HDR_DEFAULT, SUBTITLE_OPACITY_SDR_DEFAULT } from './settings';
 import StartFrom from './startFrom';
 
-import { DecodeHealth } from 'utils/decodeHealth';
 import { VideoRange, isHdrVideoRange } from 'utils/hdr';
 import { BUTTON_HANDLER_PRIORITY } from 'utils/keyboard';
 
@@ -68,7 +66,6 @@ const Player: React.FC<PlayerProps> = ({
   const [isEpisodesOpen, setIsEpisodesOpen] = useState(false);
   const [isDiagnosticsVisible, setIsDiagnosticsVisible] = useState(false);
   const [isDiagnosticsExportVisible, setIsDiagnosticsExportVisible] = useState(false);
-  const [decodeHealth, setDecodeHealth] = useState<DecodeHealth>();
   const [failure, setFailure] = useState<PlaybackFailure>();
   const [videoRange, setVideoRange] = useState<VideoRange>();
   const [controlsVisible, setControlsVisible] = useState(true);
@@ -266,16 +263,6 @@ const Player: React.FC<PlayerProps> = ({
   useEffect(() => {
     const intervalId = setInterval(() => {
       const video = getVideoNode(playerRef.current);
-      const next = video?.decodeHealth;
-
-      // Re-render only when something a viewer would see actually changed, so a healthy stream
-      // does not re-render the player every two seconds for nothing.
-      setDecodeHealth((current) =>
-        current?.severity === next?.severity && current?.droppedRatio === next?.droppedRatio && current?.decodeErrors === next?.decodeErrors
-          ? current
-          : next,
-      );
-
       const nextFailure = video?.failure;
 
       setFailure((current) => (current?.since === nextFailure?.since ? current : nextFailure));
@@ -325,7 +312,6 @@ const Player: React.FC<PlayerProps> = ({
         onExportToggle={handleDiagnosticsExportToggle}
         player={playerRef}
       />
-      <DecodeHealthIndicator health={decodeHealth} hidden={isDiagnosticsVisible || isDiagnosticsExportVisible} />
       <PlaybackFailureNotice
         failure={failure}
         // Anything that owns the screen outranks it: the state is terminal and will still be there
